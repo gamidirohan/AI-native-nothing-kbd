@@ -1,0 +1,31 @@
+// Java-only wrapper around LiteRT-LM.
+//
+// LiteRT-LM is compiled with Kotlin 2.x, but this project's Kotlin compiler is 1.9.20 and cannot
+// read those class files. javac ignores Kotlin metadata, so keeping every use of LiteRT-LM in a
+// module without the Kotlin plugin lets the app consume it through a plain Java API.
+plugins {
+    id 'com.android.library' version '8.2.0'
+}
+
+android {
+    namespace 'org.futo.inputmethod.litert'
+    compileSdk 34
+
+    defaultConfig {
+        minSdk 24
+        targetSdk 34
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    // 0.16.1 is the newest release whose own dependencies (coroutines 1.9.0) stay readable by
+    // the app's Kotlin 1.9 toolchain. kotlin-reflect is only needed for tool calling.
+    implementation('com.google.ai.edge.litertlm:litertlm-android:0.16.1') {
+        exclude group: 'org.jetbrains.kotlin', module: 'kotlin-reflect'
+    }
+}

@@ -19,7 +19,10 @@ interface RewriteEngine {
     suspend fun rewrite(request: RewriteRequest, onPartial: (String) -> Unit): String
 }
 
-class RewriteException(message: String, cause: Throwable? = null) : Exception(message, cause)
+open class RewriteException(message: String, cause: Throwable? = null) : Exception(message, cause) {
+    /** The model file has not been downloaded or imported yet. */
+    class ModelMissing : RewriteException("AI model not installed yet.")
+}
 
 /**
  * Placeholder engine used until a real on-device model is wired in. It returns the input
@@ -46,9 +49,14 @@ object RewriteEngineProvider {
     @Volatile
     private var engine: RewriteEngine? = null
 
-    fun get(@Suppress("UNUSED_PARAMETER") context: Context): RewriteEngine {
+    fun get(context: Context): RewriteEngine {
         return engine ?: synchronized(this) {
-            engine ?: StubRewriteEngine().also { engine = it }
+            engine ?: LiteRtRewriteEngine(context).also { engine = it }
         }
+    }
+
+    /** Frees the model's memory if it is loaded. Safe to call at any time. */
+    fun release() {
+        (engine as? LiteRtRewriteEngine)?.release()
     }
 }

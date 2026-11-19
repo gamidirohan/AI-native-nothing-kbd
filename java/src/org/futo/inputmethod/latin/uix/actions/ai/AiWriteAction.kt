@@ -113,6 +113,13 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction) {
                 state = RewriteUiState.Done(result.trim())
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: RewriteException.ModelMissing) {
+                state = RewriteUiState.Failed(
+                    context.getString(
+                        R.string.ai_write_model_missing,
+                        LlmModelStore.defaultModelFile(context).absolutePath
+                    )
+                )
             } catch (e: Exception) {
                 state = RewriteUiState.Failed(e.message ?: "Unknown error")
             }

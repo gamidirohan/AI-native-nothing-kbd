@@ -34,6 +34,7 @@
     <string name="ai_write_replace">Replace</string>
     <string name="ai_write_copy">Copy</string>
     <string name="ai_write_copied">Copied</string>
+    <string name="ai_write_model_missing">The AI model is not installed yet. Copy the model file to:\n%1$s</string>
     <string name="ai_write_text_changed">The text changed since it was read. Tap Refresh and try again.</string>
     <string name="mem_debug_action_title">Debug Info</string>
     <string name="more_actions_action_title">All Actions</string>
