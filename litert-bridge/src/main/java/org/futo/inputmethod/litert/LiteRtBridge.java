@@ -9,6 +9,7 @@ import com.google.ai.edge.litertlm.EngineConfig;
 import com.google.ai.edge.litertlm.Message;
 import com.google.ai.edge.litertlm.MessageCallback;
 import com.google.ai.edge.litertlm.SamplerConfig;
+import com.google.ai.edge.litertlm.ThinkingConfig;
 import com.google.ai.edge.litertlm.ToolProvider;
 
 import java.util.Collections;
@@ -32,8 +33,7 @@ public final class LiteRtBridge implements AutoCloseable {
 
     /** Loads the model. Slow (seconds); never call on the main thread. */
     public LiteRtBridge(String modelPath, String cacheDir) {
-        // Arguments after modelPath are LiteRT-LM's own Kotlin defaults (CPU backend, no vision
-        // or audio backend, no token or image limit); Java cannot call Kotlin default arguments.
+        // CPU backend, no vision or audio backend, no token or image limit.
         EngineConfig config = new EngineConfig(
                 modelPath, new Backend.CPU(null, null), null, null, null, null, cacheDir);
         Engine created = new Engine(config);
@@ -60,8 +60,10 @@ public final class LiteRtBridge implements AutoCloseable {
             double temperature,
             final Listener listener) throws InterruptedException {
 
-        // Only the system instruction and sampler are set; everything else is LiteRT-LM's own
-        // Kotlin default (empty history and tools, no lora, no thinking config).
+        // Rewrites are short and direct, so "thinking" (Qwen3's reasoning phase) is switched off;
+        // it made each rewrite take several times longer for no visible benefit.
+        // Arguments between the sampler and the thinking config are LiteRT-LM's own defaults
+        // (read from the 0.19.1 library); Java has no way to skip them.
         ConversationConfig config = new ConversationConfig(
                 Contents.Companion.of(systemPrompt),
                 Collections.<Message>emptyList(),
@@ -73,8 +75,7 @@ public final class LiteRtBridge implements AutoCloseable {
                 null,
                 false,
                 null,
-                null,
-                false);
+                new ThinkingConfig(false));
 
         final Conversation conversation = engine.createConversation(config);
         try {

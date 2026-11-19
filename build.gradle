@@ -1,3 +1,15 @@
+// AGP 8.2's bundled R8/D8 cannot convert the invokedynamic bytecode in LiteRT-LM (used by the
+// AI Writing action) for minSdk 24. A newer R8 on the buildscript classpath takes precedence.
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools:r8:8.7.18'
+    }
+}
+
 plugins {
     id 'com.android.application' version '8.2.0'
     id 'org.jetbrains.kotlin.android' version '1.9.20'

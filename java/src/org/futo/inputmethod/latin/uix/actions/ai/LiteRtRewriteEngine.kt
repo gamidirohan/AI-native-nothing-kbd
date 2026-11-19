@@ -63,27 +63,47 @@ class LiteRtRewriteEngine(context: Context) : RewriteEngine {
     ): String {
         val bridge = ensureBridge(modelPath)
         val sampler = samplerFor(request.style)
+        val steps = request.style.instructions
 
-        val raw = StringBuilder()
-        try {
-            val full = bridge.generate(
-                RewritePrompts.SYSTEM,
-                RewritePrompts.user(request),
-                sampler.topK, sampler.topP, sampler.temperature
-            ) { chunk ->
-                raw.append(chunk)
-                onPartial(RewriteOutput.clean(raw.toString(), request.text))
+        var current = request.text
+        for ((index, instruction) in steps.withIndex()) {
+            val isLast = index == steps.lastIndex
+            val raw = StringBuilder()
+
+            try {
+                bridge.generate(
+                    RewritePrompts.SYSTEM,
+                    RewritePrompts.user(instruction, current),
+                    sampler.topK, sampler.topP, sampler.temperature
+                ) { chunk ->
+                    // Only the last step is shown while it streams; earlier steps are intermediate.
+                    raw.append(chunk)
+                    if (isLast) onPartial(RewriteOutput.clean(raw.toString(), request.text))
+                }
+            } catch (e: InterruptedException) {
+                throw CancellationException("Rewrite cancelled").also { it.initCause(e) }
+            } catch (e: Exception) {
+                throw RewriteException("The model failed: ${e.message}", e)
             }
-            if (raw.isEmpty()) raw.append(full)
-        } catch (e: InterruptedException) {
-            throw CancellationException("Rewrite cancelled").also { it.initCause(e) }
-        } catch (e: Exception) {
-            throw RewriteException("The model failed: ${e.message}", e)
+
+            val output = RewriteOutput.clean(raw.toString(), request.text)
+            if (output.isBlank()) throw RewriteException("The model returned nothing. Try again.")
+
+            // Editing should not change the length much. A wildly different length means the
+            // model cut the text short or rambled, so keep the previous text for this step.
+            current = if (request.style.category == RewriteCategory.Editor && !isPlausibleEdit(current, output)) {
+                current
+            } else {
+                output
+            }
         }
 
-        val result = RewriteOutput.clean(raw.toString(), request.text)
-        if (result.isBlank()) throw RewriteException("The model returned nothing. Try again.")
-        return result
+        return current
+    }
+
+    private fun isPlausibleEdit(before: String, after: String): Boolean {
+        val ratio = after.length.toDouble() / before.length.coerceAtLeast(1)
+        return ratio in 0.6..1.6
     }
 
     private fun ensureBridge(modelPath: String): LiteRtBridge {

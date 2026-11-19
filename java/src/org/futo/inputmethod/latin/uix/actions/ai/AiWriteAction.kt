@@ -16,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -23,6 +24,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -79,6 +82,68 @@ private fun copyToClipboard(context: Context, text: String) {
 }
 
 @Composable
+private fun ModelDownloadCard(
+    state: ModelDownloadState,
+    onStart: () -> Unit,
+    onCancel: () -> Unit
+) {
+    val spec = LlmModelStore.DEFAULT_MODEL
+    val totalMb = (spec.sizeBytes / (1024 * 1024)).toInt()
+
+    Column(
+        modifier = Modifier.padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            stringResource(R.string.ai_write_download_title),
+            style = MaterialTheme.typography.titleMedium
+        )
+        Text(
+            stringResource(R.string.ai_write_download_desc, spec.displayName, totalMb),
+            style = MaterialTheme.typography.bodySmall
+        )
+
+        when (state) {
+            is ModelDownloadState.Downloading -> {
+                val fraction = if (state.totalBytes > 0) {
+                    (state.downloadedBytes.toFloat() / state.totalBytes).coerceIn(0f, 1f)
+                } else 0f
+                LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
+                Text(
+                    stringResource(
+                        R.string.ai_write_download_progress,
+                        (state.downloadedBytes / (1024 * 1024)).toInt(),
+                        (state.totalBytes / (1024 * 1024)).toInt()
+                    ),
+                    style = MaterialTheme.typography.bodySmall
+                )
+                OutlinedButton(onClick = onCancel) { Text(stringResource(R.string.ai_write_cancel)) }
+            }
+
+            is ModelDownloadState.Verifying -> {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                Text(stringResource(R.string.ai_write_verifying), style = MaterialTheme.typography.bodySmall)
+            }
+
+            is ModelDownloadState.Failed -> {
+                Text(
+                    state.message,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Button(onClick = onStart) { Text(stringResource(R.string.ai_write_retry)) }
+            }
+
+            else -> {
+                Button(onClick = onStart) {
+                    Text(stringResource(R.string.ai_write_download_button, totalMb))
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun AiWriteScreen(manager: KeyboardManagerForAction) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -90,6 +155,15 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction) {
     var state by remember { mutableStateOf<RewriteUiState>(RewriteUiState.Idle) }
     var copied by remember { mutableStateOf(false) }
     var job by remember { mutableStateOf<Job?>(null) }
+    var installed by remember { mutableStateOf(LlmModelStore.isInstalled(context)) }
+    val downloadState by LlmModelDownloader.state.collectAsState()
+
+    LaunchedEffect(downloadState) {
+        if (downloadState is ModelDownloadState.Done) {
+            installed = LlmModelStore.isInstalled(context)
+            LlmModelDownloader.reset()
+        }
+    }
 
     fun refreshTarget() {
         job?.cancel()
@@ -101,6 +175,7 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction) {
 
     fun run(style: RewriteStyle) {
         val currentTarget = target ?: return
+        if (!installed) return
         job?.cancel()
         selectedStyle = style
         copied = false
@@ -114,12 +189,8 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: RewriteException.ModelMissing) {
-                state = RewriteUiState.Failed(
-                    context.getString(
-                        R.string.ai_write_model_missing,
-                        LlmModelStore.defaultModelFile(context).absolutePath
-                    )
-                )
+                installed = false
+                state = RewriteUiState.Idle
             } catch (e: Exception) {
                 state = RewriteUiState.Failed(e.message ?: "Unknown error")
             }
@@ -174,19 +245,27 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction) {
                 .fillMaxWidth()
                 .weight(1f)
         ) {
-            val body = when (val s = state) {
-                is RewriteUiState.Idle -> stringResource(R.string.ai_write_idle_hint)
-                is RewriteUiState.Working -> s.partial.ifEmpty { stringResource(R.string.ai_write_working) }
-                is RewriteUiState.Done -> s.text
-                is RewriteUiState.Failed -> s.message
+            if (!installed) {
+                ModelDownloadCard(
+                    state = downloadState,
+                    onStart = { LlmModelDownloader.start(context) },
+                    onCancel = { LlmModelDownloader.cancel() }
+                )
+            } else {
+                val body = when (val s = state) {
+                    is RewriteUiState.Idle -> stringResource(R.string.ai_write_idle_hint)
+                    is RewriteUiState.Working -> s.partial.ifEmpty { stringResource(R.string.ai_write_working) }
+                    is RewriteUiState.Done -> s.text
+                    is RewriteUiState.Failed -> s.message
+                }
+                Text(
+                    text = body,
+                    color = if (state is RewriteUiState.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier
+                        .padding(12.dp)
+                        .verticalScroll(rememberScrollState())
+                )
             }
-            Text(
-                text = body,
-                color = if (state is RewriteUiState.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier
-                    .padding(12.dp)
-                    .verticalScroll(rememberScrollState())
-            )
         }
 
         Row(

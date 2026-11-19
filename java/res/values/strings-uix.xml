@@ -34,7 +34,13 @@
     <string name="ai_write_replace">Replace</string>
     <string name="ai_write_copy">Copy</string>
     <string name="ai_write_copied">Copied</string>
-    <string name="ai_write_model_missing">The AI model is not installed yet. Copy the model file to:\n%1$s</string>
+    <string name="ai_write_download_title">Download the AI model</string>
+    <string name="ai_write_download_desc">One-time download of %1$s (%2$d MB). It runs on your phone, so your text never leaves it.</string>
+    <string name="ai_write_download_button">Download (%1$d MB)</string>
+    <string name="ai_write_download_progress">%1$d of %2$d MB</string>
+    <string name="ai_write_verifying">Checking the file…</string>
+    <string name="ai_write_cancel">Cancel</string>
+    <string name="ai_write_retry">Retry</string>
     <string name="ai_write_text_changed">The text changed since it was read. Tap Refresh and try again.</string>
     <string name="mem_debug_action_title">Debug Info</string>
     <string name="more_actions_action_title">All Actions</string>

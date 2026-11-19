@@ -23,9 +23,16 @@ android {
 }
 
 dependencies {
-    // 0.16.1 is the newest release whose own dependencies (coroutines 1.9.0) stay readable by
-    // the app's Kotlin 1.9 toolchain. kotlin-reflect is only needed for tool calling.
-    implementation('com.google.ai.edge.litertlm:litertlm-android:0.16.1') {
-        exclude group: 'org.jetbrains.kotlin', module: 'kotlin-reflect'
+    // 0.18.0 or newer is needed to load the current litert-community model files.
+    //
+    // The library is built with Kotlin 2.4 and coroutines 1.11, but the app compiles with
+    // Kotlin 1.9. Gradle would pull the library's newer Kotlin libraries into the app's compile
+    // classpath, which the 1.9 compiler cannot read. So the Kotlin libraries are excluded here
+    // and the app's own versions are used at runtime instead. The library was run against
+    // kotlin-stdlib 1.9.20 and coroutines 1.7.1 on a real model and works with them (only the
+    // callback API used by LiteRtBridge was exercised, not the Flow API).
+    implementation('com.google.ai.edge.litertlm:litertlm-android:0.19.1') {
+        exclude group: 'org.jetbrains.kotlin'
+        exclude group: 'org.jetbrains.kotlinx'
     }
 }
