@@ -29,6 +29,15 @@ data class DialogRequestItem(
     val onClick: () -> Unit
 )
 
+/**
+ * A snapshot of the text an action should operate on: the current selection if there is one,
+ * otherwise the whole contents of the focused text field.
+ */
+data class TextTarget(
+    val text: String,
+    val isSelection: Boolean
+)
+
 interface KeyboardManagerForAction {
     fun getContext(): Context
     fun getLifecycleScope(): LifecycleCoroutineScope
@@ -39,6 +48,19 @@ interface KeyboardManagerForAction {
 
     fun typeText(v: String)
     fun replaceAllText(v: String)
+
+    /**
+     * Reads the selected text, or the whole text field when nothing is selected.
+     * Returns null if there is no input connection or the field is empty.
+     */
+    fun getTextTarget(): TextTarget?
+
+    /**
+     * Replaces [target] with [newText]. If the target was a selection, only that selection is
+     * replaced; otherwise the whole text field is. Returns false if the field no longer matches
+     * the snapshot (e.g. the user changed the selection), in which case nothing is modified.
+     */
+    fun replaceTextTarget(target: TextTarget, newText: String): Boolean
     fun typeUri(uri: Uri, mimeTypes: List<String>): Boolean
     fun backspace(amount: Int)
 

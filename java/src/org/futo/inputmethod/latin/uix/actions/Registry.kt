@@ -12,6 +12,7 @@ import org.futo.inputmethod.latin.uix.SettingsKey
 import org.futo.inputmethod.latin.uix.USE_SYSTEM_VOICE_INPUT
 import org.futo.inputmethod.latin.uix.getSetting
 import org.futo.inputmethod.latin.uix.setSettingBlocking
+import org.futo.inputmethod.latin.uix.actions.ai.AiWriteAction
 
 // Note: indices must stay stable
 val AllActionsMap = mapOf(
@@ -31,7 +32,8 @@ val AllActionsMap = mapOf(
     "cut" to CutAction,
     "copy" to CopyAction,
     "select_all" to SelectAllAction,
-    "more" to MoreActionsAction
+    "more" to MoreActionsAction,
+    "ai_write" to AiWriteAction
 )
 
 val ActionToId = AllActionsMap.entries.associate { it.value to it.key }
@@ -231,7 +233,7 @@ fun String.toActionList(): List<Action> = split(",").mapNotNull { AllActionsMap[
 val DefaultActionSettings = mapOf(
     ActionCategory.ActionKey to listOf(EmojiAction),
     ActionCategory.PinnedKey to listOf(VoiceInputAction),
-    ActionCategory.Favorites to listOf(SwitchLanguageAction, UndoAction, RedoAction, TextEditAction, ClipboardHistoryAction, ThemeAction, TranslateAction),
+    ActionCategory.Favorites to listOf(SwitchLanguageAction, UndoAction, RedoAction, TextEditAction, ClipboardHistoryAction, ThemeAction, TranslateAction, AiWriteAction),
     ActionCategory.More to listOf(), // Remaining actions get populated automatically by ensureWellFormed
     ActionCategory.Disabled to listOf(MemoryDebugAction, SystemVoiceInputAction)
 )

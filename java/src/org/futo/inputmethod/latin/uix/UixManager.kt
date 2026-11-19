@@ -105,6 +105,9 @@ val LocalThemeProvider = staticCompositionLocalOf<DynamicThemeProvider> {
     error("No LocalThemeProvider provided")
 }
 
+// Upper bound on how much text before/after the cursor is read for whole-field operations
+private const val MAX_TEXT_TARGET_CHARS = 20_000
+
 private class LatinIMEActionInputTransaction(
     private val inputLogic: InputLogic,
     shouldApplySpace: Boolean,
@@ -181,6 +184,43 @@ class UixActionKeyboardManager(val uixManager: UixManager, val latinIME: LatinIM
             ic.setComposingText("", 1)
             ic.commitText(v, 1)
         }
+    }
+
+    override fun getTextTarget(): TextTarget? {
+        val ic = latinIME.getBaseInputConnection() ?: return null
+
+        val selected = ic.getSelectedText(0)
+        if(!selected.isNullOrEmpty()) {
+            return TextTarget(selected.toString(), isSelection = true)
+        }
+
+        val before = ic.getTextBeforeCursor(MAX_TEXT_TARGET_CHARS, 0) ?: ""
+        val after = ic.getTextAfterCursor(MAX_TEXT_TARGET_CHARS, 0) ?: ""
+        val all = "$before$after"
+        return if(all.isBlank()) null else TextTarget(all, isSelection = false)
+    }
+
+    override fun replaceTextTarget(target: TextTarget, newText: String): Boolean {
+        val ic = latinIME.getBaseInputConnection() ?: return false
+
+        ic.beginBatchEdit()
+        try {
+            if(target.isSelection) {
+                if(ic.getSelectedText(0)?.toString() != target.text) return false
+                // Committing text replaces the active selection
+                ic.commitText(newText, 1)
+            } else {
+                val before = ic.getTextBeforeCursor(MAX_TEXT_TARGET_CHARS, 0) ?: ""
+                val after = ic.getTextAfterCursor(MAX_TEXT_TARGET_CHARS, 0) ?: ""
+                if("$before$after" != target.text) return false
+                ic.finishComposingText()
+                ic.deleteSurroundingText(before.length, after.length)
+                ic.commitText(newText, 1)
+            }
+        } finally {
+            ic.endBatchEdit()
+        }
+        return true
     }
 
     override fun typeUri(uri: Uri, mimeTypes: List<String>): Boolean {
