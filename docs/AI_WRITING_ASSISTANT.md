@@ -157,6 +157,26 @@ Clipboard history already exists (`ClipboardHistoryAction.kt`).
   - Appetize.io: runs APKs in a phone browser. Sources disagree on the free tier (30 or 100 minutes a month, short sessions), too little for a 600 MB model. It likely needs an x86_64 build.
   - BrowserStack App Live, AWS Device Farm and LambdaTest: real devices, free trials only.
 
+## Round 2 changes (2026-11-20, after the first install)
+
+- **Fix all only.** The separate Grammar, Spelling and Punctuation options are gone, and so are the Editor and Tone tabs. One row of options: Fix all, Professional, Casual, Polite, Funny, LinkedIn, Shorten, Translate.
+- **Starts automatically.** Opening AI Writing runs Fix all on the selected text, or on the whole field, straight away. It also runs once a missing model finishes downloading. Switching to the clipboard, or tapping Refresh, re-runs the last option. Text handed over from the clipboard history, and auto-translate, still take priority.
+- **"Edits" renamed "Strength"** (Light, Balanced, Strong). Tapping it switches level, shows a short explanation and re-runs the current option. The selected/whole-field/clipboard label moved into the result card, and the control row scrolls sideways.
+- **Tone prompts: tried, not changed.** On the real 0.6B model:
+  - Adding an example to each tone prompt made it worse. It copied the example ("Could you please review this at your earliest convenience?" for every input) or reversed the meaning ("Could you please be late?").
+  - More specific wording without examples did no better.
+  - The larger Qwen3 1.7B (4-bit, 977 MB) gave clearly better tones with the existing prompts ("I am unable to attend the party tonight", "You're a true hero! 🎉").
+  - But the 1.7B was worse at Fix all: it left "me and him goes" and "two apple". It was also slower: 42 s against 30 s for six messages, plus 6.6 s to load against 1.7 s.
+  - A single-step Fix all was faster (10 s against 30 s) but missed most capitals and punctuation, so Fix all stays three steps.
+- **Spacebar.**
+  - Sliding up or down now moves the cursor between lines (40 dp of finger travel per line). It only does this in multi-line text fields, because arrow keys in a single-line field can move focus elsewhere in the app.
+  - The default spacebar mode is now "Swiping and long-pressing only moves cursor". Long-press gives a short vibration, then sliding moves the cursor. Long-press no longer opens the keyboard picker, unless that mode is picked again in Keyboard & Typing settings.
+- **Vibration strength.**
+  - New slider in Keyboard & Typing: Default, or 1-100%. It uses `VibrationEffect` amplitude, which needs Android 8+ and a motor that can vary its strength; otherwise the slider has no effect.
+  - The existing slider is renamed "Vibration length".
+  - With the strength set and the length at Default, each press is 10 ms.
+- Not tested on a device: all of the above.
+
 ## Known limits
 
 - Nothing has been run on an Android device. The APK builds, but whether it installs, starts and rewrites correctly is untested.

@@ -102,6 +102,8 @@ public interface KeyboardActionListener {
     public boolean onCustomRequest(int requestCode);
 
     public void onMovePointer(int steps);
+    /** Moves the cursor up (negative) or down (positive) by this many lines. */
+    public void onMovePointerVertical(int steps);
     public void onMoveDeletePointer(int steps);
     public void onUpWithDeletePointerActive();
     public void onUpWithPointerActive();
@@ -135,6 +137,8 @@ public interface KeyboardActionListener {
         public boolean onCustomRequest(int requestCode) { return false; }
         @Override
         public void onMovePointer(int steps) {}
+        @Override
+        public void onMovePointerVertical(int steps) {}
         @Override
         public void onMoveDeletePointer(int steps) {}
         @Override

@@ -3,14 +3,15 @@ package org.futo.inputmethod.latin.uix.actions.ai
 import androidx.annotation.StringRes
 import org.futo.inputmethod.latin.R
 
-enum class RewriteCategory(@StringRes val label: Int) {
-    Editor(R.string.ai_write_tab_editor),
-    Tone(R.string.ai_write_tab_tone)
+/** Editor styles correct mistakes and must keep the wording; Tone styles may rewrite. */
+enum class RewriteCategory {
+    Editor,
+    Tone
 }
 
 /**
- * How far the model may go from the original text, like an "accuracy level". The setting is
- * stored by [ordinal], so do not reorder these.
+ * The "Strength" control in the panel: how far the model may go from the original text.
+ * Stored by [ordinal], so do not reorder these.
  */
 enum class FormatLevel(@StringRes val label: Int) {
     Light(R.string.ai_write_level_light),
@@ -61,10 +62,14 @@ private const val PUNCTUATION_STEP =
 const val LANGUAGE_PLACEHOLDER = "{language}"
 
 /**
- * Every rewrite option the user can pick. [instructions] are run one after another, each on the
- * previous result. The on-device model is small, so it does best with one short, narrow
- * instruction at a time; "Fix all" is therefore spelling, then grammar, then punctuation.
- * These wordings were tried against the real Qwen3 0.6B model.
+ * Every rewrite option the user can pick, in the order shown in the panel. [instructions] are
+ * run one after another, each on the previous result. The on-device model is small, so it does
+ * best with one short, narrow instruction at a time: "Fix all" is spelling, then grammar, then
+ * punctuation. A single combined instruction was tried and missed most capitals and
+ * punctuation. These wordings were tried against the real Qwen3 0.6B model.
+ *
+ * Tone prompts with an example, or with more specific wording, were also tried and were worse:
+ * the model copied the example or reversed the meaning. See docs/AI_WRITING_ASSISTANT.md.
  */
 enum class RewriteStyle(
     val category: RewriteCategory,
@@ -78,9 +83,6 @@ enum class RewriteStyle(
         RewriteCategory.Editor, R.string.ai_write_fix_all,
         listOf(SPELLING_STEP, GRAMMAR_STEP, PUNCTUATION_STEP)
     ),
-    Grammar(RewriteCategory.Editor, R.string.ai_write_grammar, listOf(GRAMMAR_STEP)),
-    Spelling(RewriteCategory.Editor, R.string.ai_write_spelling, listOf(SPELLING_STEP)),
-    Punctuation(RewriteCategory.Editor, R.string.ai_write_punctuation, listOf(PUNCTUATION_STEP)),
 
     // Tone
     Professional(
@@ -113,9 +115,6 @@ enum class RewriteStyle(
         needsLanguage = true
     );
 
-    companion object {
-        fun forCategory(category: RewriteCategory) = entries.filter { it.category == category }
-    }
 }
 
 data class RewriteRequest(

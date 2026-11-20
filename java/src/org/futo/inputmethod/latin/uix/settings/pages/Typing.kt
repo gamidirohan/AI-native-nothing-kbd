@@ -88,6 +88,11 @@ val vibrationDurationSetting = SettingsKey(
     -1
 )
 
+val vibrationStrengthSetting = SettingsKey(
+    intPreferencesKey("vibration_strength"),
+    -1
+)
+
 val ActionBarDisplayedSetting = SettingsKey(
     booleanPreferencesKey("enable_action_bar"),
     true
@@ -393,7 +398,7 @@ fun LongPressScreen(navController: NavHostController = rememberNavController()) 
                 ),
                 setting = useSharedPrefsInt(
                     key = Settings.PREF_SPACEBAR_MODE,
-                    default = Settings.SPACEBAR_MODE_SWIPE_CURSOR
+                    default = Settings.SPACEBAR_MODE_DEFAULT
                 )
             )
         }
@@ -405,12 +410,14 @@ fun LongPressScreen(navController: NavHostController = rememberNavController()) 
 fun TypingScreen(navController: NavHostController = rememberNavController()) {
     val context = LocalContext.current
     val (vibration, _) = useDataStore(key = vibrationDurationSetting.key, default = vibrationDurationSetting.default)
+    val (vibrationStrength, _) = useDataStore(key = vibrationStrengthSetting.key, default = vibrationStrengthSetting.default)
 
-    LaunchedEffect(vibration) {
+    LaunchedEffect(vibration, vibrationStrength) {
         val sharedPrefs = PreferenceUtils.getDefaultSharedPreferences(context)
         withContext(Dispatchers.Main) {
             sharedPrefs.edit {
                 putInt(PREF_VIBRATION_DURATION_SETTINGS, vibration)
+                putInt(Settings.PREF_VIBRATION_STRENGTH_SETTINGS, vibrationStrength)
             }
         }
     }
@@ -539,7 +546,22 @@ fun TypingScreen(navController: NavHostController = rememberNavController()) {
         )
 
         SettingSlider(
-            title = "Vibration",
+            title = "Vibration strength",
+            subtitle = "How strong each key press vibrates. Lower it if typing vibrates too much.",
+            setting = vibrationStrengthSetting,
+            range = -1.0f .. 100.0f,
+            transform = { it.roundToInt() },
+            indicator = {
+                if(it <= 0) {
+                    "Default"
+                } else {
+                    "$it%"
+                }
+            }
+        )
+
+        SettingSlider(
+            title = "Vibration length",
             setting = vibrationDurationSetting,
             range = -1.0f .. 100.0f,
             hardRange = -1.0f .. 2000.0f,

@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -209,7 +211,6 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction) {
     val level = FormatLevel.fromOrdinal(levelSetting.value)
     val languageCode = languageSetting.value
 
-    var category by remember { mutableStateOf(RewriteCategory.Editor) }
     var selectedStyle by remember { mutableStateOf<RewriteStyle?>(null) }
     var source by remember { mutableStateOf(TextSource.Field) }
     var fieldTarget by remember { mutableStateOf<TextTarget?>(manager.getTextTarget()) }
@@ -220,6 +221,7 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction) {
     var job by remember { mutableStateOf<Job?>(null) }
     var installed by remember { mutableStateOf(LlmModelStore.isInstalled(context)) }
     var languageMenuOpen by remember { mutableStateOf(false) }
+    var handoffChecked by remember { mutableStateOf(false) }
     val downloadState by LlmModelDownloader.state.collectAsState()
 
     LaunchedEffect(downloadState) {
@@ -264,14 +266,19 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction) {
         }
     }
 
+    /** Runs the last chosen style again (Fix all if none) on the current text. */
+    fun rerun() {
+        val style = selectedStyle ?: RewriteStyle.FixAll
+        if (installed && inputText() != null) run(style) else state = RewriteUiState.Idle
+    }
+
     fun useField() {
         job?.cancel()
         source = TextSource.Field
         fieldTarget = manager.getTextTarget()
-        selectedStyle = null
-        state = RewriteUiState.Idle
         copied = false
         notice = null
+        rerun()
     }
 
     fun useClipboard() {
@@ -283,32 +290,38 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction) {
         }
         source = TextSource.Clipboard
         clipboardText = text
-        selectedStyle = null
-        state = RewriteUiState.Idle
         copied = false
         notice = null
+        rerun()
     }
 
-    // When the panel opens: text handed over from the clipboard history, or newly copied text
-    // that should be translated automatically.
-    LaunchedEffect(Unit) {
-        val handed = AiWriteHandoff.takePendingClipboardText()
-        if (handed != null) {
-            source = TextSource.Clipboard
-            clipboardText = handed
-            return@LaunchedEffect
+    // When the panel opens, and again once a missing model has been installed: start right away.
+    // Text handed over from the clipboard history is used if there is any. Otherwise newly copied
+    // text is translated if auto-translate is on, and if not, the text field gets Fix all.
+    LaunchedEffect(installed) {
+        if (!handoffChecked) {
+            handoffChecked = true
+            AiWriteHandoff.takePendingClipboardText()?.let {
+                source = TextSource.Clipboard
+                clipboardText = it
+            }
         }
 
-        if (context.getSetting(AI_AUTO_TRANSLATE_CLIPBOARD) && LlmModelStore.isInstalled(context)) {
+        // Nothing to do without a model, and never interrupt something the user started.
+        if (!installed || job != null) return@LaunchedEffect
+
+        if (source == TextSource.Field && context.getSetting(AI_AUTO_TRANSLATE_CLIPBOARD)) {
             val copiedText = readClipboardText(context)
             if (copiedText != null && AiWriteHandoff.isNewForAutoTranslate(copiedText)) {
                 AiWriteHandoff.markAutoHandled(copiedText)
                 source = TextSource.Clipboard
                 clipboardText = copiedText
-                category = RewriteCategory.Tone
                 run(RewriteStyle.Translate)
+                return@LaunchedEffect
             }
         }
+
+        if (inputText() != null) run(RewriteStyle.FixAll)
     }
 
     Column(
@@ -317,26 +330,9 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction) {
             .padding(horizontal = 8.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            RewriteCategory.entries.forEach {
-                Pill(
-                    label = stringResource(it.label),
-                    selected = category == it,
-                    modifier = Modifier.weight(1f)
-                ) { category = it }
-            }
-            // Tap to cycle Light -> Balanced -> Strong.
-            Pill(
-                label = stringResource(R.string.ai_write_level_label, stringResource(level.label)),
-                selected = false,
-                modifier = Modifier.weight(1.6f)
-            ) {
-                levelSetting.setValue((level.ordinal + 1) % FormatLevel.entries.size)
-            }
-        }
-
+        // Fix all first, then the tones.
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(RewriteStyle.forCategory(category)) { style ->
+            items(RewriteStyle.entries) { style ->
                 Pill(
                     label = stringResource(style.label),
                     selected = selectedStyle == style
@@ -344,21 +340,30 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction) {
             }
         }
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            val text = inputText()
-            val infoText = when {
-                notice != null -> notice!!
-                text == null -> stringResource(R.string.ai_write_no_text)
-                source == TextSource.Clipboard -> stringResource(R.string.ai_write_target_clipboard, text.length)
-                fieldTarget?.isSelection == true -> stringResource(R.string.ai_write_target_selection, text.length)
-                else -> stringResource(R.string.ai_write_target_all, text.length)
+        // Controls. Scrolls sideways on narrow screens instead of squeezing the buttons.
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.horizontalScroll(rememberScrollState())
+        ) {
+            // Strength: tap to cycle Light -> Balanced -> Strong, then the current style runs again.
+            TextButton(
+                onClick = {
+                    val next = (level.ordinal + 1) % FormatLevel.entries.size
+                    scope.launch {
+                        // Save first: run() reads the saved level.
+                        context.setSetting(AI_FORMAT_LEVEL, next)
+                        selectedStyle?.let { run(it) }
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.ai_write_strength_help, context.getString(FormatLevel.fromOrdinal(next).label)),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                },
+                contentPadding = compactTextButtonPadding
+            ) {
+                Text(stringResource(R.string.ai_write_level_label, stringResource(level.label)))
             }
-            Text(
-                text = infoText,
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 1,
-                modifier = Modifier.weight(1f)
-            )
 
             // Language picker, only for styles that need one.
             if (selectedStyle?.needsLanguage == true) {
@@ -420,19 +425,37 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction) {
                     onOpenSettings = { openAiWritingSettings(context) }
                 )
             } else {
+                val text = inputText()
+                val infoText = when {
+                    notice != null -> notice!!
+                    text == null -> stringResource(R.string.ai_write_no_text)
+                    source == TextSource.Clipboard -> stringResource(R.string.ai_write_target_clipboard, text.length)
+                    fieldTarget?.isSelection == true -> stringResource(R.string.ai_write_target_selection, text.length)
+                    else -> stringResource(R.string.ai_write_target_all, text.length)
+                }
                 val body = when (val s = state) {
                     is RewriteUiState.Idle -> stringResource(R.string.ai_write_idle_hint)
                     is RewriteUiState.Working -> s.partial.ifEmpty { stringResource(R.string.ai_write_working) }
                     is RewriteUiState.Done -> s.text
                     is RewriteUiState.Failed -> s.message
                 }
-                Text(
-                    text = body,
-                    color = if (state is RewriteUiState.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onBackground,
+                Column(
                     modifier = Modifier
                         .padding(12.dp)
                         .verticalScroll(rememberScrollState())
-                )
+                ) {
+                    // What is being rewritten: selection, whole field or clipboard.
+                    Text(
+                        text = infoText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                    )
+                    Text(
+                        text = body,
+                        color = if (state is RewriteUiState.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
             }
         }
 

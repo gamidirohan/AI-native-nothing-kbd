@@ -14,12 +14,7 @@
     <string name="text_edit_action_title">Text Editor</string>
     <string name="translate_action_title">Translate</string>
     <string name="ai_write_action_title">AI Writing</string>
-    <string name="ai_write_tab_editor">Editor</string>
-    <string name="ai_write_tab_tone">Tone</string>
     <string name="ai_write_fix_all">Fix all</string>
-    <string name="ai_write_grammar">Grammar</string>
-    <string name="ai_write_spelling">Spelling</string>
-    <string name="ai_write_punctuation">Punctuation</string>
     <string name="ai_write_professional">Professional</string>
     <string name="ai_write_casual">Casual</string>
     <string name="ai_write_polite">Polite</string>
@@ -30,7 +25,7 @@
     <string name="ai_write_level_light">Light</string>
     <string name="ai_write_level_balanced">Balanced</string>
     <string name="ai_write_level_strong">Strong</string>
-    <string name="ai_write_level_label">Edits: %1$s</string>
+    <string name="ai_write_level_label">Strength: %1$s</string>
     <string name="ai_write_translate_to">To: %1$s</string>
     <string name="ai_write_translate_note">On-device, basic quality</string>
     <string name="ai_write_target_clipboard">Clipboard · %1$d characters</string>
@@ -49,6 +44,7 @@
     <string name="ai_write_no_text">No text found. Type something or select text first.</string>
     <string name="ai_write_refresh">Refresh</string>
     <string name="ai_write_idle_hint">Pick an option above to rewrite your text.</string>
+    <string name="ai_write_strength_help">Strength %1$s. Light keeps your words, Strong may rephrase.</string>
     <string name="ai_write_working">Working…</string>
     <string name="ai_write_replace">Replace</string>
     <string name="ai_write_copy">Copy</string>

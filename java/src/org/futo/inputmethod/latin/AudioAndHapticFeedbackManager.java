@@ -17,6 +17,8 @@
 package org.futo.inputmethod.latin;
 
 import android.content.Context;
+import android.os.Build;
+import android.os.VibrationEffect;
 import android.media.AudioManager;
 import android.os.Vibrator;
 import android.view.HapticFeedbackConstants;
@@ -112,6 +114,9 @@ public final class AudioAndHapticFeedbackManager {
         if (!mSettingsValues.mVibrateOn) {
             return;
         }
+        if (vibrateWithCustomStrength(repeatKey)) {
+            return;
+        }
         if (mSettingsValues.mKeypressVibrationDuration >= 0) {
             vibrate(mSettingsValues.mKeypressVibrationDuration / (repeatKey ? 2 : 1));
             return;
@@ -121,6 +126,34 @@ public final class AudioAndHapticFeedbackManager {
             viewToPerformHapticFeedbackOn.performHapticFeedback(
                     HapticFeedbackConstants.KEYBOARD_TAP);
         }
+    }
+
+    // Duration used with a custom strength when the duration setting is left at "Default".
+    private static final int CUSTOM_STRENGTH_DEFAULT_DURATION_MS = 10;
+
+    /**
+     * Vibrates at the strength chosen in settings, if one is set and the vibration motor can vary
+     * its strength (API 26+). Returns false when the caller should use the normal vibration.
+     */
+    private boolean vibrateWithCustomStrength(final boolean repeatKey) {
+        final int strength = mSettingsValues.mKeypressVibrationStrength;
+        if (strength <= 0 || mVibrator == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.O
+                || !mVibrator.hasAmplitudeControl()) {
+            return false;
+        }
+
+        int milliseconds = mSettingsValues.mKeypressVibrationDuration >= 0
+                ? mSettingsValues.mKeypressVibrationDuration
+                : CUSTOM_STRENGTH_DEFAULT_DURATION_MS;
+        if (repeatKey) milliseconds /= 2;
+        if (milliseconds <= 0) {
+            // A duration of 0 ms means no vibration.
+            return true;
+        }
+
+        final int amplitude = Math.max(1, Math.min(255, Math.round(strength * 255f / 100f)));
+        mVibrator.vibrate(VibrationEffect.createOneShot(milliseconds, amplitude));
+        return true;
     }
 
     public void onSettingsChanged(final SettingsValues settingsValues) {

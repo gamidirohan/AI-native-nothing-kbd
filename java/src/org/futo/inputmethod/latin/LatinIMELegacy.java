@@ -1309,6 +1309,28 @@ public class LatinIMELegacy implements KeyboardActionListener,
     }
 
     @Override
+    public void onMovePointerVertical(int steps) {
+        // Up and down arrow keys in a single-line field can move focus to another part of the
+        // app, so only send them where the text can have more than one line.
+        final EditorInfo editorInfo = mInputMethodService.getCurrentInputEditorInfo();
+        if (editorInfo == null) return;
+        final int inputType = editorInfo.inputType;
+        final boolean isText = (inputType & InputType.TYPE_MASK_CLASS) == InputType.TYPE_CLASS_TEXT;
+        final boolean isMultiLine = (inputType & InputType.TYPE_TEXT_FLAG_MULTI_LINE) != 0
+                || (inputType & InputType.TYPE_TEXT_FLAG_IME_MULTI_LINE) != 0;
+        if (!isText || !isMultiLine) return;
+
+        int shiftMode = mKeyboardSwitcher.getKeyboardShiftMode();
+        boolean select = (shiftMode == WordComposer.CAPS_MODE_MANUAL_SHIFTED) || (shiftMode == WordComposer.CAPS_MODE_MANUAL_SHIFT_LOCKED);
+
+        if(select) {
+            mInputLogic.disableRecapitalization();
+        }
+
+        mInputLogic.cursorVertical(steps, select);
+    }
+
+    @Override
     public void onMoveDeletePointer(int steps) {
         if (mInputLogic.mConnection.hasCursorPosition()) {
             boolean stepOverWords = mSettings.getCurrent().mBackspaceMode == Settings.BACKSPACE_MODE_WORDS;

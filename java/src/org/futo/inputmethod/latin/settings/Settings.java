@@ -89,6 +89,10 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     public static final String PREF_GESTURE_INPUT = "gesture_input";
     public static final String PREF_VIBRATION_DURATION_SETTINGS =
             "pref_vibration_duration_settings";
+    // Key-press vibration strength, 1-100 (percent of the motor's maximum), or -1 for the
+    // system default.
+    public static final String PREF_VIBRATION_STRENGTH_SETTINGS =
+            "pref_vibration_strength_settings";
     public static final String PREF_KEYPRESS_SOUND_VOLUME = "pref_keypress_sound_volume";
     public static final String PREF_KEY_LONGPRESS_TIMEOUT = "pref_key_longpress_timeout";
     public static final String PREF_ENABLE_EMOJI_ALT_PHYSICAL_KEY =
@@ -119,6 +123,9 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     public static final int SPACEBAR_MODE_SWIPE_CURSOR = 0; // Long-Press switches language, swipe moves cursor
     public static final int SPACEBAR_MODE_SWIPE_LANGUAGE = 1; // Swipe switches language, long-press+drag moves cursor
     public static final int SPACEBAR_MODE_SWIPE_CURSOR_ONLY = 2; // Swipe and long-press+drag moves cursor
+    // Cursor-only, so long-pressing the spacebar and then sliding moves the cursor (trackpad
+    // style) instead of opening the keyboard picker. Applies until the user picks a mode.
+    public static final int SPACEBAR_MODE_DEFAULT = SPACEBAR_MODE_SWIPE_CURSOR_ONLY;
 
     public static final String PREF_BACKSPACE_MODE = "pref_backspace_mode";
     public static final int BACKSPACE_MODE_CHARACTERS = 0; // Long-press backspace and swipe backspace removes just characters

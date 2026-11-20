@@ -2563,6 +2563,23 @@ public final class InputLogic {
     }
 
     /**
+     * Moves the cursor up (negative) or down (positive) by a number of lines. There is no
+     * line-based InputConnection call, so this sends arrow-key events; the editor then reports
+     * the new cursor position through onUpdateSelection.
+     * @param select Whether or not to start/continue selection
+     */
+    public void cursorVertical(int steps, boolean select) {
+        if (steps == 0) return;
+        finishInput();
+
+        final int keyCode = steps < 0 ? KeyEvent.KEYCODE_DPAD_UP : KeyEvent.KEYCODE_DPAD_DOWN;
+        final int meta = select ? KeyEvent.META_SHIFT_ON : 0;
+        for (int i = 0; i < Math.abs(steps); i++) {
+            sendDownUpKeyEvent(keyCode, meta);
+        }
+    }
+
+    /**
      * Shifts the cursor right by a number of characters
      * @param steps How many characters to step over, or the direction if stepOverWords
      * @param stepOverWords Whether to ignore the magnitude of steps and step over full words

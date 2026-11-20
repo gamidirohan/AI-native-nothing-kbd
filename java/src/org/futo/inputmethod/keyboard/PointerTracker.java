@@ -88,6 +88,9 @@ public final class PointerTracker implements PointerTrackerQueue.Element,
     private static PointerTrackerParams sParams;
     private static final int sPointerStep = (int)(16.0 * Resources.getSystem().getDisplayMetrics().density);
     private static final int sPointerBigStep = (int)(32.0 * Resources.getSystem().getDisplayMetrics().density);
+    // Finger travel per line when moving the cursor up or down with the spacebar. Larger than
+    // the horizontal step so a slightly wobbly sideways slide does not change lines.
+    private static final int sPointerVerticalStep = (int)(40.0 * Resources.getSystem().getDisplayMetrics().density);
     private static final int sPointerHugeStep = Integer.min(
             (int)(128.0 * Resources.getSystem().getDisplayMetrics().density),
             Resources.getSystem().getDisplayMetrics().widthPixels * 3 / 2
@@ -928,15 +931,26 @@ public final class PointerTracker implements PointerTrackerQueue.Element,
 
             int steps = (x - mStartX) / pointerStep;
             final int swipeIgnoreTime = settingsValues.mKeyLongpressTimeout / MULTIPLIER_FOR_LONG_PRESS_TIMEOUT_IN_SLIDING_INPUT;
-            if (steps != 0 && mStartTime + swipeIgnoreTime < System.currentTimeMillis()) {
+            final boolean pastIgnoreTime = mStartTime + swipeIgnoreTime < System.currentTimeMillis();
+            final boolean swipingLanguage = settingsValues.mSpacebarMode == Settings.SPACEBAR_MODE_SWIPE_LANGUAGE && !mSpacebarLongPressed;
+            if (steps != 0 && pastIgnoreTime) {
                 mCursorMoved = true;
                 mStartX += steps * pointerStep;
 
-                if(settingsValues.mSpacebarMode == Settings.SPACEBAR_MODE_SWIPE_LANGUAGE && !mSpacebarLongPressed) {
+                if(swipingLanguage) {
                     sListener.onSwipeLanguage(steps);
                 } else {
                     sListener.onMovePointer(steps);
                 }
+            }
+
+            // Sliding up or down moves the cursor between lines, whenever the spacebar is
+            // moving the cursor (not while it is switching language).
+            final int lineSteps = (y - mStartY) / sPointerVerticalStep;
+            if (lineSteps != 0 && pastIgnoreTime && !swipingLanguage) {
+                mCursorMoved = true;
+                mStartY += lineSteps * sPointerVerticalStep;
+                sListener.onMovePointerVertical(lineSteps);
             }
 
             mLastX = x;
@@ -1125,6 +1139,8 @@ public final class PointerTracker implements PointerTrackerQueue.Element,
                 sListener.onMovingCursorLockEvent(true);
                 return;
             }else if(spacebarMode == Settings.SPACEBAR_MODE_SWIPE_CURSOR_ONLY) {
+                // A short vibration tells the user they can now slide to move the cursor.
+                sListener.onMovingCursorLockEvent(true);
                 return;
             }
 
