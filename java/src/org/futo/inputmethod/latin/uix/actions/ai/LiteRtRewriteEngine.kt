@@ -1,5 +1,6 @@
 package org.futo.inputmethod.latin.uix.actions.ai
 
+import android.app.ActivityManager
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.CancellationException
@@ -19,6 +20,13 @@ private const val TAG = "LiteRtRewriteEngine"
 
 /** The model stays loaded for a while after use so repeated taps are fast, then is released. */
 private const val IDLE_RELEASE_MS = 90_000L
+
+/**
+ * The model process measured 1.4 GB after loading and 2.0 GB after a few rewrites (desktop JVM;
+ * see docs/AI_WRITING_ASSISTANT.md). Below this much free RAM, loading risks Android killing the
+ * keyboard, so we refuse with a clear message instead.
+ */
+private const val MIN_FREE_RAM_BYTES = 1600L * 1024L * 1024L
 
 /**
  * Runs rewrites on a local `.litertlm` model through LiteRT-LM, via the Java-only
@@ -62,19 +70,21 @@ class LiteRtRewriteEngine(context: Context) : RewriteEngine {
         onPartial: (String) -> Unit
     ): String {
         val bridge = ensureBridge(modelPath)
-        val sampler = samplerFor(request.style)
+        val temperature = request.level.temperature(request.style.category)
+        val system = RewritePrompts.system(request.style)
         val steps = request.style.instructions
 
         var current = request.text
-        for ((index, instruction) in steps.withIndex()) {
+        for ((index, step) in steps.withIndex()) {
             val isLast = index == steps.lastIndex
             val raw = StringBuilder()
+            val instruction = RewritePrompts.instruction(request, step)
 
             try {
                 bridge.generate(
-                    RewritePrompts.SYSTEM,
+                    system,
                     RewritePrompts.user(instruction, current),
-                    sampler.topK, sampler.topP, sampler.temperature
+                    TOP_K, TOP_P, temperature
                 ) { chunk ->
                     // Only the last step is shown while it streams; earlier steps are intermediate.
                     raw.append(chunk)
@@ -110,12 +120,20 @@ class LiteRtRewriteEngine(context: Context) : RewriteEngine {
         bridge?.let { if (loadedPath == modelPath) return it }
         releaseBridge()
 
+        val memory = ActivityManager.MemoryInfo()
+        (appContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(memory)
+        if (memory.availMem < MIN_FREE_RAM_BYTES) {
+            throw RewriteException("Not enough free memory to load the AI model. Close some apps and try again.")
+        }
+
         try {
             val created = LiteRtBridge(modelPath, appContext.cacheDir.path)
             bridge = created
             loadedPath = modelPath
             return created
-        } catch (e: UnsatisfiedLinkError) {
+        } catch (e: LinkageError) {
+            // UnsatisfiedLinkError when the native library is missing for this CPU (32-bit
+            // phones), NoClassDefFoundError on later attempts after that failure.
             throw RewriteException("This device is not supported by the on-device model runtime.", e)
         } catch (e: Exception) {
             throw RewriteException("Could not load the model: ${e.message}", e)
@@ -142,11 +160,8 @@ class LiteRtRewriteEngine(context: Context) : RewriteEngine {
         scope.launch { lock.withLock { releaseBridge() } }
     }
 
-    private class Sampler(val topK: Int, val topP: Double, val temperature: Double)
-
-    private fun samplerFor(style: RewriteStyle): Sampler {
-        // Editing should stay close to the input; tone changes may be freer.
-        val temperature = if (style.category == RewriteCategory.Editor) 0.2 else 0.7
-        return Sampler(topK = 40, topP = 0.9, temperature = temperature)
+    private companion object {
+        const val TOP_K = 40
+        const val TOP_P = 0.9
     }
 }

@@ -12,6 +12,7 @@ import org.futo.inputmethod.latin.R
 import org.futo.inputmethod.latin.uix.ErrorDialog
 import org.futo.inputmethod.latin.uix.InfoDialog
 import org.futo.inputmethod.latin.uix.settings.pages.AddLanguageScreen
+import org.futo.inputmethod.latin.uix.settings.pages.AiWritingScreen
 import org.futo.inputmethod.latin.uix.settings.pages.AdvancedParametersScreen
 import org.futo.inputmethod.latin.uix.settings.pages.BlacklistScreen
 import org.futo.inputmethod.latin.uix.settings.pages.CreditsScreen
@@ -57,6 +58,7 @@ fun SettingsNavigator(
         composable("advancedparams") { AdvancedParametersScreen(navController) }
         addTypingNavigation(navController)
         composable("voiceInput") { VoiceInputScreen(navController) }
+        composable("aiWriting") { AiWritingScreen(navController) }
         composable("themes") { ThemeScreen(navController) }
         composable("help") { HelpScreen(navController) }
         composable("developer") { DeveloperScreen(navController) }

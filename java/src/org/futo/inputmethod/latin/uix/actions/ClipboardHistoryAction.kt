@@ -59,6 +59,8 @@ import org.futo.inputmethod.latin.uix.DialogRequestItem
 import org.futo.inputmethod.latin.uix.PersistentActionState
 import org.futo.inputmethod.latin.uix.PersistentStateInitialization
 import org.futo.inputmethod.latin.uix.SettingsKey
+import org.futo.inputmethod.latin.uix.actions.ai.AiWriteAction
+import org.futo.inputmethod.latin.uix.actions.ai.AiWriteHandoff
 import org.futo.inputmethod.latin.uix.getSettingBlocking
 import org.futo.inputmethod.latin.uix.isDirectBootUnlocked
 import org.futo.inputmethod.latin.uix.settings.ScrollableList
@@ -99,7 +101,7 @@ data class ClipboardEntry(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun ClipboardEntryView(modifier: Modifier, clipboardEntry: ClipboardEntry, onPaste: (ClipboardEntry) -> Unit, onRemove: (ClipboardEntry) -> Unit, onPin: (ClipboardEntry) -> Unit) {
+fun ClipboardEntryView(modifier: Modifier, clipboardEntry: ClipboardEntry, onPaste: (ClipboardEntry) -> Unit, onRemove: (ClipboardEntry) -> Unit, onPin: (ClipboardEntry) -> Unit, onRewrite: ((ClipboardEntry) -> Unit)? = null) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
         border = BorderStroke(2.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -132,6 +134,20 @@ fun ClipboardEntryView(modifier: Modifier, clipboardEntry: ClipboardEntry, onPas
                 }
 
                 Spacer(modifier = Modifier.weight(1.0f))
+
+                // Rewrite or translate this item in AI Writing. Text items only.
+                if (onRewrite != null && clipboardEntry.text != null && clipboardEntry.uri == null) {
+                    IconButton(onClick = {
+                        onRewrite(clipboardEntry)
+                    }, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            painterResource(id = R.drawable.ai_write),
+                            contentDescription = "Rewrite with AI",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
 
                 IconButton(onClick = {
                     onRemove(clipboardEntry)
@@ -525,6 +541,11 @@ val ClipboardHistoryAction = Action(
                             }, onPin = {
                                 clipboardHistoryManager.onPin(it)
                                 manager.performHapticAndAudioFeedback(Constants.CODE_TAB, view)
+                            }, onRewrite = {
+                                it.text?.let { text ->
+                                    AiWriteHandoff.offerClipboardText(text)
+                                    manager.activateAction(AiWriteAction)
+                                }
                             })
                         }
                     }

@@ -3,10 +3,13 @@ package org.futo.inputmethod.latin.uix.actions.ai
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -16,6 +19,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -34,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
@@ -43,14 +51,28 @@ import org.futo.inputmethod.latin.R
 import org.futo.inputmethod.latin.uix.Action
 import org.futo.inputmethod.latin.uix.ActionWindow
 import org.futo.inputmethod.latin.uix.KeyboardManagerForAction
-import org.futo.inputmethod.latin.uix.LocalManager
+import org.futo.inputmethod.latin.uix.PersistentActionState
 import org.futo.inputmethod.latin.uix.TextTarget
+import org.futo.inputmethod.latin.uix.getSetting
+import org.futo.inputmethod.latin.uix.setSetting
+import org.futo.inputmethod.latin.uix.settings.SettingsActivity
+import org.futo.inputmethod.latin.uix.settings.useDataStore
 
 private sealed interface RewriteUiState {
     data object Idle : RewriteUiState
     data class Working(val partial: String) : RewriteUiState
     data class Done(val text: String) : RewriteUiState
     data class Failed(val message: String) : RewriteUiState
+}
+
+/** Where the text to rewrite comes from. */
+private enum class TextSource { Field, Clipboard }
+
+/** Releases the model when the system asks the keyboard to free memory. */
+private class AiWritePersistentState : PersistentActionState {
+    override suspend fun cleanUp() {
+        RewriteEngineProvider.release()
+    }
 }
 
 @Composable
@@ -76,22 +98,35 @@ private fun Pill(
     }
 }
 
+private val compactTextButtonPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+
 private fun copyToClipboard(context: Context, text: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     clipboard.setPrimaryClip(ClipData.newPlainText("AI Writing", text))
+}
+
+private fun openAiWritingSettings(context: Context) {
+    val intent = Intent(context, SettingsActivity::class.java)
+    intent.putExtra("navDest", "aiWriting")
+    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+    context.startActivity(intent)
 }
 
 @Composable
 private fun ModelDownloadCard(
     state: ModelDownloadState,
     onStart: () -> Unit,
-    onCancel: () -> Unit
+    onStartAnyway: () -> Unit,
+    onCancel: () -> Unit,
+    onOpenSettings: () -> Unit
 ) {
     val spec = LlmModelStore.DEFAULT_MODEL
     val totalMb = (spec.sizeBytes / (1024 * 1024)).toInt()
 
     Column(
-        modifier = Modifier.padding(12.dp),
+        modifier = Modifier
+            .padding(12.dp)
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
@@ -125,6 +160,21 @@ private fun ModelDownloadCard(
                 Text(stringResource(R.string.ai_write_verifying), style = MaterialTheme.typography.bodySmall)
             }
 
+            is ModelDownloadState.WaitingForUnmetered -> {
+                Text(
+                    stringResource(R.string.ai_write_download_wifi_only),
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onStartAnyway) {
+                        Text(stringResource(R.string.ai_write_download_anyway))
+                    }
+                    OutlinedButton(onClick = onOpenSettings) {
+                        Text(stringResource(R.string.ai_write_settings))
+                    }
+                }
+            }
+
             is ModelDownloadState.Failed -> {
                 Text(
                     state.message,
@@ -135,8 +185,13 @@ private fun ModelDownloadCard(
             }
 
             else -> {
-                Button(onClick = onStart) {
-                    Text(stringResource(R.string.ai_write_download_button, totalMb))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onStart) {
+                        Text(stringResource(R.string.ai_write_download_button, totalMb))
+                    }
+                    OutlinedButton(onClick = onOpenSettings) {
+                        Text(stringResource(R.string.ai_write_import_file))
+                    }
                 }
             }
         }
@@ -149,13 +204,22 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction) {
     val scope = rememberCoroutineScope()
     val engine = remember { RewriteEngineProvider.get(context) }
 
+    val levelSetting = useDataStore(AI_FORMAT_LEVEL)
+    val languageSetting = useDataStore(AI_TRANSLATE_TARGET)
+    val level = FormatLevel.fromOrdinal(levelSetting.value)
+    val languageCode = languageSetting.value
+
     var category by remember { mutableStateOf(RewriteCategory.Editor) }
     var selectedStyle by remember { mutableStateOf<RewriteStyle?>(null) }
-    var target by remember { mutableStateOf<TextTarget?>(manager.getTextTarget()) }
+    var source by remember { mutableStateOf(TextSource.Field) }
+    var fieldTarget by remember { mutableStateOf<TextTarget?>(manager.getTextTarget()) }
+    var clipboardText by remember { mutableStateOf<String?>(null) }
+    var notice by remember { mutableStateOf<String?>(null) }
     var state by remember { mutableStateOf<RewriteUiState>(RewriteUiState.Idle) }
     var copied by remember { mutableStateOf(false) }
     var job by remember { mutableStateOf<Job?>(null) }
     var installed by remember { mutableStateOf(LlmModelStore.isInstalled(context)) }
+    var languageMenuOpen by remember { mutableStateOf(false) }
     val downloadState by LlmModelDownloader.state.collectAsState()
 
     LaunchedEffect(downloadState) {
@@ -165,26 +229,29 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction) {
         }
     }
 
-    fun refreshTarget() {
-        job?.cancel()
-        target = manager.getTextTarget()
-        selectedStyle = null
-        state = RewriteUiState.Idle
-        copied = false
+    /** The text the chosen style will be applied to. */
+    fun inputText(): String? = when (source) {
+        TextSource.Field -> fieldTarget?.text
+        TextSource.Clipboard -> clipboardText
     }
 
     fun run(style: RewriteStyle) {
-        val currentTarget = target ?: return
+        val text = inputText() ?: return
         if (!installed) return
         job?.cancel()
         selectedStyle = style
         copied = false
+        notice = null
         state = RewriteUiState.Working("")
         job = scope.launch {
             try {
-                val result = engine.rewrite(RewriteRequest(style, currentTarget.text)) {
-                    state = RewriteUiState.Working(it)
-                }
+                // Read the settings at the moment of the tap, so a change is never missed.
+                val currentLevel = FormatLevel.fromOrdinal(context.getSetting(AI_FORMAT_LEVEL))
+                val currentLanguage = AiTranslateLanguages.name(context.getSetting(AI_TRANSLATE_TARGET))
+
+                val result = engine.rewrite(
+                    RewriteRequest(style, text, currentLevel, currentLanguage)
+                ) { state = RewriteUiState.Working(it) }
                 state = RewriteUiState.Done(result.trim())
             } catch (e: CancellationException) {
                 throw e
@@ -193,6 +260,53 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction) {
                 state = RewriteUiState.Idle
             } catch (e: Exception) {
                 state = RewriteUiState.Failed(e.message ?: "Unknown error")
+            }
+        }
+    }
+
+    fun useField() {
+        job?.cancel()
+        source = TextSource.Field
+        fieldTarget = manager.getTextTarget()
+        selectedStyle = null
+        state = RewriteUiState.Idle
+        copied = false
+        notice = null
+    }
+
+    fun useClipboard() {
+        job?.cancel()
+        val text = readClipboardText(context)
+        if (text == null) {
+            notice = context.getString(R.string.ai_write_clipboard_empty)
+            return
+        }
+        source = TextSource.Clipboard
+        clipboardText = text
+        selectedStyle = null
+        state = RewriteUiState.Idle
+        copied = false
+        notice = null
+    }
+
+    // When the panel opens: text handed over from the clipboard history, or newly copied text
+    // that should be translated automatically.
+    LaunchedEffect(Unit) {
+        val handed = AiWriteHandoff.takePendingClipboardText()
+        if (handed != null) {
+            source = TextSource.Clipboard
+            clipboardText = handed
+            return@LaunchedEffect
+        }
+
+        if (context.getSetting(AI_AUTO_TRANSLATE_CLIPBOARD) && LlmModelStore.isInstalled(context)) {
+            val copiedText = readClipboardText(context)
+            if (copiedText != null && AiWriteHandoff.isNewForAutoTranslate(copiedText)) {
+                AiWriteHandoff.markAutoHandled(copiedText)
+                source = TextSource.Clipboard
+                clipboardText = copiedText
+                category = RewriteCategory.Tone
+                run(RewriteStyle.Translate)
             }
         }
     }
@@ -211,6 +325,14 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction) {
                     modifier = Modifier.weight(1f)
                 ) { category = it }
             }
+            // Tap to cycle Light -> Balanced -> Strong.
+            Pill(
+                label = stringResource(R.string.ai_write_level_label, stringResource(level.label)),
+                selected = false,
+                modifier = Modifier.weight(1.6f)
+            ) {
+                levelSetting.setValue((level.ordinal + 1) % FormatLevel.entries.size)
+            }
         }
 
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -223,17 +345,61 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction) {
         }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
-            val t = target
+            val text = inputText()
+            val infoText = when {
+                notice != null -> notice!!
+                text == null -> stringResource(R.string.ai_write_no_text)
+                source == TextSource.Clipboard -> stringResource(R.string.ai_write_target_clipboard, text.length)
+                fieldTarget?.isSelection == true -> stringResource(R.string.ai_write_target_selection, text.length)
+                else -> stringResource(R.string.ai_write_target_all, text.length)
+            }
             Text(
-                text = when {
-                    t == null -> stringResource(R.string.ai_write_no_text)
-                    t.isSelection -> stringResource(R.string.ai_write_target_selection, t.text.length)
-                    else -> stringResource(R.string.ai_write_target_all, t.text.length)
-                },
+                text = infoText,
                 style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
                 modifier = Modifier.weight(1f)
             )
-            TextButton(onClick = { refreshTarget() }) {
+
+            // Language picker, only for styles that need one.
+            if (selectedStyle?.needsLanguage == true) {
+                Box {
+                    TextButton(onClick = { languageMenuOpen = true }, contentPadding = compactTextButtonPadding) {
+                        Text(stringResource(R.string.ai_write_translate_to, AiTranslateLanguages.name(languageCode)))
+                    }
+                    DropdownMenu(expanded = languageMenuOpen, onDismissRequest = { languageMenuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.ai_write_translate_note)) },
+                            onClick = {},
+                            enabled = false
+                        )
+                        AiTranslateLanguages.languages.forEach { (code, name) ->
+                            DropdownMenuItem(
+                                text = { Text(name) },
+                                onClick = {
+                                    languageMenuOpen = false
+                                    scope.launch {
+                                        // Save first: run() reads the saved language.
+                                        context.setSetting(AI_TRANSLATE_TARGET, code)
+                                        run(RewriteStyle.Translate)
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (source == TextSource.Field) {
+                TextButton(onClick = { useClipboard() }, contentPadding = compactTextButtonPadding) {
+                    Text(stringResource(R.string.ai_write_use_clipboard))
+                }
+            } else {
+                TextButton(onClick = { useField() }, contentPadding = compactTextButtonPadding) {
+                    Text(stringResource(R.string.ai_write_use_field))
+                }
+            }
+            TextButton(onClick = { if (source == TextSource.Clipboard) useClipboard() else useField() },
+                contentPadding = compactTextButtonPadding) {
                 Text(stringResource(R.string.ai_write_refresh))
             }
         }
@@ -249,7 +415,9 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction) {
                 ModelDownloadCard(
                     state = downloadState,
                     onStart = { LlmModelDownloader.start(context) },
-                    onCancel = { LlmModelDownloader.cancel() }
+                    onStartAnyway = { LlmModelDownloader.start(context, allowMetered = true) },
+                    onCancel = { LlmModelDownloader.cancel(context) },
+                    onOpenSettings = { openAiWritingSettings(context) }
                 )
             } else {
                 val body = when (val s = state) {
@@ -273,20 +441,32 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction) {
             modifier = Modifier.fillMaxWidth()
         ) {
             val done = state as? RewriteUiState.Done
-            val currentTarget = target
+            val currentTarget = fieldTarget
 
             Button(
-                enabled = done != null && currentTarget != null,
+                enabled = done != null && (source == TextSource.Clipboard || currentTarget != null),
                 modifier = Modifier.weight(1f),
                 onClick = {
-                    if (done == null || currentTarget == null) return@Button
-                    if (manager.replaceTextTarget(currentTarget, done.text)) {
+                    if (done == null) return@Button
+                    if (source == TextSource.Clipboard) {
+                        // Clipboard text goes in at the cursor, replacing any selection.
+                        manager.typeText(done.text)
                         manager.closeActionWindow()
-                    } else {
-                        state = RewriteUiState.Failed(context.getString(R.string.ai_write_text_changed))
+                    } else if (currentTarget != null) {
+                        if (manager.replaceTextTarget(currentTarget, done.text)) {
+                            manager.closeActionWindow()
+                        } else {
+                            state = RewriteUiState.Failed(context.getString(R.string.ai_write_text_changed))
+                        }
                     }
                 }
-            ) { Text(stringResource(R.string.ai_write_replace)) }
+            ) {
+                Text(
+                    stringResource(
+                        if (source == TextSource.Clipboard) R.string.ai_write_insert else R.string.ai_write_replace
+                    )
+                )
+            }
 
             OutlinedButton(
                 enabled = done != null,
@@ -307,12 +487,25 @@ val AiWriteAction = Action(
     icon = R.drawable.ai_write,
     name = R.string.ai_write_action_title,
     simplePressImpl = null,
-    persistentState = null,
+    persistentState = { AiWritePersistentState() },
     canShowKeyboard = false,
     windowImpl = { manager, _ ->
         object : ActionWindow {
             @Composable
             override fun windowName(): String = stringResource(R.string.ai_write_action_title)
+
+            @Composable
+            override fun WindowTitleBar(rowScope: RowScope) {
+                super.WindowTitleBar(rowScope)
+
+                val context = LocalContext.current
+                IconButton(onClick = { openAiWritingSettings(context) }) {
+                    Icon(
+                        painterResource(id = R.drawable.settings),
+                        contentDescription = stringResource(R.string.ai_write_settings)
+                    )
+                }
+            }
 
             @Composable
             override fun WindowContents(keyboardShown: Boolean) {

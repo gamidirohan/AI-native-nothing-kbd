@@ -1,20 +1,22 @@
 package org.futo.inputmethod.latin.uix.actions.ai
 
 import android.content.Context
+import android.net.ConnectivityManager
 import android.util.Log
+import androidx.work.Constraints
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.futo.inputmethod.latin.uix.getSettingBlocking
 import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
@@ -25,6 +27,9 @@ private const val TAG = "LlmModelDownloader"
 
 sealed interface ModelDownloadState {
     data object Idle : ModelDownloadState
+
+    /** Wi-Fi only is on and the current connection is metered. */
+    data object WaitingForUnmetered : ModelDownloadState
     data class Downloading(val downloadedBytes: Long, val totalBytes: Long) : ModelDownloadState
     data object Verifying : ModelDownloadState
     data object Done : ModelDownloadState
@@ -34,18 +39,17 @@ sealed interface ModelDownloadState {
 /**
  * Downloads the rewrite model from Hugging Face.
  *
+ * - The work runs in a WorkManager foreground job ([ModelDownloadWorker]), so it carries on if
+ *   the keyboard is closed and is restarted if Android kills the process.
  * - Resumes a partial `.part` file with an HTTP Range request.
  * - Checks free space first, and the SHA-256 after, before the file gets its final name.
- * - State lives in this process-wide object, so closing and reopening the AI Writing panel
- *   shows the current progress. The download stops if the keyboard process is killed and
- *   resumes from the partial file on the next attempt.
+ * - [state] is shared process-wide, so reopening the AI Writing panel shows current progress.
  */
 object LlmModelDownloader {
+    const val WORK_NAME = "ai_writing_model_download"
+
     private val _state = MutableStateFlow<ModelDownloadState>(ModelDownloadState.Idle)
     val state: StateFlow<ModelDownloadState> = _state.asStateFlow()
-
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var job: Job? = null
 
     private val client by lazy {
         OkHttpClient.Builder()
@@ -54,49 +58,93 @@ object LlmModelDownloader {
             .build()
     }
 
-    @Synchronized
-    fun start(context: Context, spec: LlmModelSpec = LlmModelStore.DEFAULT_MODEL) {
-        if (job?.isActive == true) return
-        val appContext = context.applicationContext
-        _state.value = ModelDownloadState.Downloading(0, spec.sizeBytes)
+    /** True if the active connection is metered (mobile data, or Wi-Fi marked as metered). */
+    fun isMeteredConnection(context: Context): Boolean {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        return cm.isActiveNetworkMetered
+    }
 
-        job = scope.launch {
-            try {
-                download(appContext, spec)
-                _state.value = ModelDownloadState.Done
-            } catch (e: CancellationException) {
-                _state.value = ModelDownloadState.Idle
-                throw e
-            } catch (e: Exception) {
-                Log.w(TAG, "Download failed", e)
-                _state.value = ModelDownloadState.Failed(e.message ?: "Download failed")
-            }
+    /**
+     * Starts the download unless one is already running.
+     *
+     * @param allowMetered download even if Wi-Fi only is on and the connection is metered
+     */
+    fun start(
+        context: Context,
+        allowMetered: Boolean = false,
+        spec: LlmModelSpec = LlmModelStore.DEFAULT_MODEL
+    ) {
+        val appContext = context.applicationContext
+
+        val wifiOnly = appContext.getSettingBlocking(AI_DOWNLOAD_WIFI_ONLY)
+        if (wifiOnly && !allowMetered && isMeteredConnection(appContext)) {
+            _state.value = ModelDownloadState.WaitingForUnmetered
+            return
         }
+
+        _state.value = ModelDownloadState.Downloading(LlmModelStore.partialFile(appContext).length(), spec.sizeBytes)
+
+        val request = OneTimeWorkRequestBuilder<ModelDownloadWorker>()
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .build()
+
+        // KEEP: if a download is already running, tapping again does nothing.
+        WorkManager.getInstance(appContext).enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.KEEP, request)
     }
 
     /** Stops the download but keeps the partial file so it can be resumed. */
-    @Synchronized
-    fun cancel() {
-        job?.cancel()
-        job = null
+    fun cancel(context: Context) {
+        WorkManager.getInstance(context.applicationContext).cancelUniqueWork(WORK_NAME)
+        _state.value = ModelDownloadState.Idle
     }
 
-    /** Clears a Done or Failed state back to Idle. */
+    /** Clears a Done, Failed or WaitingForUnmetered state back to Idle. */
     fun reset() {
-        if (job?.isActive != true) _state.value = ModelDownloadState.Idle
+        if (_state.value !is ModelDownloadState.Downloading && _state.value !is ModelDownloadState.Verifying) {
+            _state.value = ModelDownloadState.Idle
+        }
     }
 
-    private suspend fun download(context: Context, spec: LlmModelSpec) {
+    /**
+     * Runs the whole download. Called by [ModelDownloadWorker]; suspends until finished.
+     * Returns true on success, false on failure (the reason is in [state]).
+     */
+    suspend fun run(
+        context: Context,
+        spec: LlmModelSpec = LlmModelStore.DEFAULT_MODEL,
+        onProgress: suspend (downloaded: Long, total: Long) -> Unit = { _, _ -> }
+    ): Boolean {
+        val appContext = context.applicationContext
+        return try {
+            download(appContext, spec, onProgress)
+            _state.value = ModelDownloadState.Done
+            true
+        } catch (e: CancellationException) {
+            _state.value = ModelDownloadState.Idle
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Download failed", e)
+            _state.value = ModelDownloadState.Failed(e.message ?: "Download failed")
+            false
+        }
+    }
+
+    private suspend fun download(
+        context: Context,
+        spec: LlmModelSpec,
+        onProgress: suspend (Long, Long) -> Unit
+    ) {
         val finalFile = LlmModelStore.defaultModelFile(context)
         val partFile = LlmModelStore.partialFile(context)
 
         if (partFile.length() > spec.sizeBytes) partFile.delete()
         var existing = partFile.length()
+        _state.value = ModelDownloadState.Downloading(existing, spec.sizeBytes)
 
         val needed = spec.sizeBytes - existing
         val free = LlmModelStore.directory(context).usableSpace
-        if (free < needed + SPACE_MARGIN_BYTES) {
-            throw IOException("Not enough free storage. About ${(needed + SPACE_MARGIN_BYTES) / MIB} MB needed.")
+        if (free < needed + LlmModelStore.SPACE_MARGIN_BYTES) {
+            throw IOException("Not enough free storage. About ${(needed + LlmModelStore.SPACE_MARGIN_BYTES) / MIB} MB needed.")
         }
 
         if (existing < spec.sizeBytes) {
@@ -133,6 +181,7 @@ object LlmModelDownloader {
                             if (now - lastReport >= PROGRESS_INTERVAL_MS) {
                                 lastReport = now
                                 _state.value = ModelDownloadState.Downloading(downloaded, spec.sizeBytes)
+                                onProgress(downloaded, spec.sizeBytes)
                             }
                         }
                     }
@@ -152,6 +201,7 @@ object LlmModelDownloader {
             throw IOException("The downloaded file is corrupt. Tap Retry to download it again.")
         }
 
+        RewriteEngineProvider.release()
         finalFile.delete()
         if (!partFile.renameTo(finalFile)) throw IOException("Could not save the model file.")
     }
@@ -171,6 +221,5 @@ object LlmModelDownloader {
     }
 
     private const val MIB = 1024L * 1024L
-    private const val SPACE_MARGIN_BYTES = 200L * MIB
     private const val PROGRESS_INTERVAL_MS = 250L
 }

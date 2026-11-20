@@ -31,6 +31,7 @@
 
     <uses-permission android:name="com.nothing.ketchum.permission.ENABLE"/>
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application android:label="@string/english_ime_name"
          android:icon="@mipmap/ic_launcher"
@@ -155,7 +156,7 @@
             tools:node="merge">
 
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Neural network model training"/>
+                android:value="Neural network model training and AI model download"/>
 
         </service>
 

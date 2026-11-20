@@ -86,6 +86,13 @@ fun HomeScreen(navController: NavHostController = rememberNavController()) {
             )
 
             NavigationItem(
+                title = "AI Writing",
+                style = NavigationItemStyle.HomeTertiary,
+                navigate = { navController.navigate("aiWriting") },
+                icon = painterResource(id = R.drawable.ai_write)
+            )
+
+            NavigationItem(
                 title = stringResource(R.string.edit_personal_dictionary),
                 style = NavigationItemStyle.HomeSecondary,
                 icon = painterResource(id = R.drawable.book),

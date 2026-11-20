@@ -1,51 +1,72 @@
 # AI Writing Assistant: progress tracker
 
 Copilot-keyboard-style rewriting for this keyboard, running on a local on-device model.
-Tick a box only after it has been checked (compiled, or tested on a device where noted).
+Tick a box only after it has been checked. "Checked" means compiled, or run on a desktop JVM with the real
+model, as noted. **Nothing has been run on an Android device yet**; every unchecked "device" item is for that.
 
 Branch: `feature/ai-writing-assistant`
 
+## Status in one paragraph
+
+All six verticals are implemented, the app builds into a debug APK (arm64), and the rewrite engine was run
+against the real model on a desktop JVM. The remaining work is testing on the Nothing phone, plus two known
+quality limits: translation into Indian languages does not work with this model, and the "Elaborate" style was
+dropped because it invents details.
+
 ## Decisions
 
-- **Engine order:** (c) LiteRT-LM (Google's on-device runtime, `.litertlm` models) first, then (a) upgrade the vendored llama.cpp, then (b) a second llama.cpp build as its own `.so`. (c) works via the `litert-bridge` module, so (a) and (b) are not needed unless it fails on a device.
-- **ML Kit GenAI (Gemini Nano via AICore):** optional extra later. Supported devices only, beta, six fixed styles.
-- **Default model:** Qwen3 0.6B INT8 (`litert-community/Qwen3-0.6B`, 586 MB, Apache-2.0). Optional bigger download later: Gemma 3 1B or Qwen3 1.7B.
-- **Model is never bundled in the APK.** Downloaded or imported on first use.
-- Tone list: Professional, Casual, Polite, Funny, LinkedIn, Translate (Witty and Social dropped).
+- **Engine:** LiteRT-LM (Google's on-device runtime, `.litertlm` models), through the `litert-bridge` module. The llama.cpp options (a, b) were not needed.
+- **Default model:** Qwen3 0.6B INT8 (`litert-community/Qwen3-0.6B`, 586 MB, Apache-2.0). Never bundled in the APK.
+- **ML Kit GenAI (Gemini Nano via AICore):** not used. Supported devices only, beta, six fixed styles.
+- **Tone list:** Professional, Casual, Polite, Funny, LinkedIn, Shorten, Translate (Witty and Social dropped; Elaborate tried and dropped).
+- **ABIs:** the repo build config is unchanged (all ABIs). LiteRT-LM ships only arm64-v8a and x86_64, so 32-bit-only phones get a "not supported" message. Nothing Phone (1) and later are 64-bit.
+- **GPU backend: not enabled.** It cannot be tested here, and a native GPU crash would take the whole keyboard down with it. The CPU backend is fast enough (see timings).
+
+## How to build
+
+Android Studio (Ladybug or newer, bundled JDK 21) can open the project as is. From a terminal with JDK 21 and the Android SDK:
+
+```
+./gradlew :assembleStableDebug -Pandroid.injected.build.abi=arm64-v8a
+```
+
+The `-P` flag builds only arm64, which is much faster. Output: `build/intermediates/apk/stable/debug/*.apk`.
+Built here on 2026-11-19: native part about 1.5 minutes, APK 122 MB (debug, arm64, includes the keyboard's own bundled model).
 
 ## Vertical 1: Panel UI and text I/O
 
 - [x] Toolbar action "AI Writing" registered (appended to `AllActionsMap`, added to default favorites)
 - [x] Editor tab: Fix all, Grammar, Spelling, Punctuation
-- [x] Tone tab: Professional, Casual, Polite, Funny, LinkedIn
+- [x] Tone tab: Professional, Casual, Polite, Funny, LinkedIn, Shorten, Translate
 - [x] Read selected text, or the whole field when nothing is selected (`getTextTarget`)
 - [x] Replace swaps the selection, or the whole field (`replaceTextTarget`), and refuses if the text changed
 - [x] Copy button writes to the system clipboard (clipboard history picks it up)
-- [x] Placeholder engine (echoes text with the style name) so the flow can be tried
-- [x] `:compileStableDebugKotlin` passes
-- [ ] Try on a device or emulator: selection replace, whole-field replace, Copy
-- [ ] Check behavior in apps where `getTextBeforeCursor` is limited (long text, password fields)
+- [x] Compiles and builds into the APK
+- [ ] **Device:** selection replace, whole-field replace, Copy
+- [ ] **Device:** behavior in apps that limit how much text the keyboard can read (long text, password fields)
+- [ ] **Device:** does the panel fit the keyboard height? (rows: tabs and strength, style chips, info line, result card, buttons)
 - [ ] Better toolbar icon (current one is a simple sparkle)
 
-## Vertical 2: Real on-device engine
+## Vertical 2: On-device engine
 
-- [x] LiteRT-LM 0.19.1 chosen (option c). It works with this project only through a workaround, see "Build notes" below
-- [x] `litert-bridge` module: Java-only wrapper, because LiteRT-LM is built with Kotlin 2.x and this project uses Kotlin 1.9.20
-- [x] `LiteRtRewriteEngine` (single owner thread, fresh conversation per request, cancel via interrupt, idle release after 90 s)
-- [x] Streaming partial output into the result card
-- [x] Output cleanup (`<think>` blocks, "Here is..." lines, wrapping quotes), skipped when the user's own text starts that way
-- [x] Qwen3 "thinking" switched off: a rewrite went from 20-35 s to 1-2 s on the test machine
-- [x] Prompts tuned against the real Qwen3 0.6B model (see "Test results"); "Fix all" is spelling, then grammar, then punctuation
+- [x] LiteRT-LM 0.19.1 through the Java-only `litert-bridge` module (the app's Kotlin 1.9 cannot read the library's Kotlin 2.x metadata)
+- [x] `LiteRtRewriteEngine`: one owner thread, fresh conversation per request, cancel via interrupt, model unloads after 90 s idle
+- [x] Streaming output into the result card; cancelled when a new style is tapped
+- [x] Output cleanup (`<think>` blocks, "Here is..." lines, wrapping quotes), skipped when the user's own text starts that way. Checked on the JVM.
+- [x] Qwen3 "thinking" switched off: a rewrite went from 20-35 s to 1-2 s on the desktop
+- [x] "Fix all" is spelling, then grammar, then punctuation; prompts tuned against the real model
 - [x] Guard: an Editor step whose output is much shorter or longer than its input is ignored
-- [x] Compiles, and LiteRT-LM classes are present in the dex output
+- [x] Model released when Android trims memory (`AiWritePersistentState.cleanUp`, called from `LatinIME.onTrimMemory`)
+- [x] Refuses to load with under 1.6 GB free RAM, with a clear message, instead of risking the keyboard being killed
+- [x] Missing native library (32-bit phone) gives a "not supported" message (catches `LinkageError`)
 - [x] Real model run through `LiteRtBridge` on desktop Linux (x86_64 JVM) with the app's Kotlin library versions
-- [ ] Run on a real Android device (nothing has been run on Android yet; timings there will differ)
-- [ ] Release the model on low memory (`RewriteEngineProvider.release()` exists, not wired to a trigger)
-- [ ] Decide whether to restrict ABIs to `arm64-v8a` (LiteRT-LM only ships arm64-v8a and x86_64; 32-bit-only phones get a "not supported" message)
-- [ ] Try the GPU backend
-- [ ] Check memory use on a phone (the model file is 586 MB; the README lists about 2.7 GB peak on CPU for a Samsung S25)
+- [ ] **Device:** first load time and rewrite speed on the Nothing phone (desktop: load 1.6 s, rewrite 1-2 s, "Fix all" 5 s)
+- [ ] **Device:** memory. Desktop: 1.37 GB after loading, 2.04 GB after a few rewrites. The 1.6 GB free-RAM limit is based on that and may need adjusting.
+- [ ] Prompt quality on the phone should match the desktop, but is not confirmed
 
 ### Test results (desktop CPU, Qwen3 0.6B INT8, thinking off)
+
+Fix all (spelling, then grammar, then punctuation):
 
 | Input | Result |
 |---|---|
@@ -54,50 +75,79 @@ Branch: `feature/ai-writing-assistant`
 | hey can u send me teh report by tomorow morning pls | Hey can you send me the report by tomorrow morning, please. |
 | Thanks for the update. I will review it today. | unchanged |
 
-A full "Fix all" took about 5 s here. Known weak spots: missing apostrophes ("Im", "Ill"), occasionally drops a word ("it were definately damaged" became "it definitely damaged"). Tone rewrites read well. The smaller 4-bit model (328 MiB) cut text short and was rejected.
+Weak spots: missing apostrophes in "Im" and "Ill", and it sometimes drops a word ("it were definately damaged" became "it definitely damaged"). Tone rewrites read well. The smaller 4-bit 0.6B model (328 MiB) cut text short and was rejected.
 
 ### Build notes
 
-- Gradle wrapper raised 8.2 -> 8.5 and the build now needs **JDK 21**: LiteRT-LM ships Java 21 class files and JDK 17's `javac` cannot read them. CI images that use JDK 17 need updating.
+- Gradle wrapper raised 8.2 -> 8.5. The build needs **JDK 21**: LiteRT-LM ships Java 21 class files and JDK 17's `javac` cannot read them. CI images that use JDK 17 need updating.
 - The root `build.gradle` puts a newer R8 (8.7.18) on the buildscript classpath: AGP 8.2's own R8 cannot convert LiteRT-LM's invokedynamic bytecode for minSdk 24.
-- LiteRT-LM 0.18.0 or newer is required to load the current `Qwen3-0.6B.litertlm` file (0.16.1 says "unknown file format").
-- `litert-bridge/build.gradle` excludes the library's own Kotlin and coroutines libraries so the Kotlin 1.9 compiler never sees Kotlin 2.x metadata. At runtime the app's Kotlin 1.9.23 stdlib and coroutines 1.7.1 are used. This was checked on a real model, using only the callback API that `LiteRtBridge` calls.
+- LiteRT-LM 0.18.0 or newer is required to load the current `Qwen3-0.6B.litertlm` (0.16.1 says "unknown file format").
+- `litert-bridge/build.gradle` excludes the library's own Kotlin and coroutines libraries, so the app's Kotlin 1.9.23 stdlib and coroutines 1.7.1 are used at runtime. Checked on a real model with only the callback API that `LiteRtBridge` calls.
 - `android.jetifier.ignorelist=litertlm-android` in `gradle.properties` stops Jetifier from choking on that library.
 - LiteRT-LM picks the file format from the extension, so the model file must end in `.litertlm`.
+- The manifest's WorkManager foreground-service description now also mentions the model download.
 
 ## Vertical 3: Model management
 
 - [x] Model storage separate from the keyboard LM (`filesDir/llm-models/`)
-- [x] In-app download from Hugging Face with progress, cancel and resume (HTTP Range)
-- [x] Pinned size and SHA-256 (checked against the real file); the file only gets its final name after the hash matches
-- [x] Free-space check before downloading
-- [x] First-use state in the panel: a download card instead of an error
-- [ ] Try the download on a device (the Range resume was checked with curl against the real server, not from the app)
-- [ ] Manual import of a `.litertlm` file as a fallback
-- [ ] Settings page: delete model, show size
-- [ ] Wi-Fi-only option (needs the `ACCESS_NETWORK_STATE` permission to detect mobile data)
-- [ ] Download currently stops if the keyboard process is killed; it resumes from the partial file on Retry. A WorkManager job would survive that.
+- [x] In-app download from Hugging Face with progress, cancel and resume (HTTP Range); pinned size and SHA-256 (checked against the real file); free-space check
+- [x] Download runs as a WorkManager foreground job with a notification and Cancel, so it survives closing the keyboard and a process kill (resumes from the partial file)
+- [x] Wi-Fi only (default on): blocks metered connections with a "Download anyway" button; setting in AI Writing settings (new `ACCESS_NETWORK_STATE` permission)
+- [x] Manual import of a `.litertlm` file; the header is checked, so a GGUF or other file is rejected
+- [x] Settings page "AI Writing" (home screen): model status and size, download/cancel, import, delete with confirmation, Wi-Fi only, auto-translate
+- [x] The panel's download card has an "Import file" button that opens that settings page, and the panel title bar has a settings icon
+- [ ] **Device:** download from the app, including cancel and resume, and the notification
+- [ ] **Device:** import a model file with the file picker
+- [ ] **Device:** delete frees the space and the panel goes back to the download card
 
-## Vertical 4: Formatting level
+Not handled: an imported file is only header-checked, so a damaged file fails later with "Could not load the model". A different model than Qwen would use the Qwen-tuned prompts.
 
-- [ ] Strength setting from "minimal edits" to "rewrite freely"
-- [ ] Map the setting to prompt wording and sampling temperature
-- [ ] Persist the choice
+## Vertical 4: Formatting level (edit strength)
+
+- [x] Tap the "Edits: Balanced" pill in the panel to cycle Light, Balanced, Strong; saved in settings
+- [x] Maps to the prompt and the sampling temperature:
+
+| Level | Editor styles | Tone styles |
+|---|---|---|
+| Light | temperature 0.1 | temperature 0.4, adds "Change as little as possible. Keep the original wording and sentence structure." |
+| Balanced | temperature 0.2 | temperature 0.7, prompt unchanged |
+| Strong | temperature 0.4, grammar step adds "You may also improve unclear wording." | temperature 0.9, adds "You may restructure sentences and change the wording freely." |
+
+- [x] Prompt building checked on the JVM for every style and level
+- [x] Tried on the real model. Tone: "hey can u send me the report by tomorrow morning pls" gave "send me the report by tomorrow morning" (Light), "Can you send the report by tomorrow morning please?" (Balanced), "Can you send the report by tomorrow morning?" (Strong). The differences are small and not always in the expected direction, because the model is small. Editor results were nearly the same at all levels.
+- [ ] **Device:** judge whether the three levels feel different enough; the wording and temperatures are easy to change in `FormatLevel` (`RewriteTypes.kt`)
 
 ## Vertical 5: More tones and translate
 
-- [ ] Translate chip with a target language picker (reuse the existing language list)
-- [ ] Optional extra styles: Shorten, Friendly, Elaborate
-- [ ] Optional ML Kit GenAI backend on supported devices
+- [x] **Shorten** style (tested: a 31-word message came back as 22 words with the meaning kept)
+- [x] **Translate** style with a language picker (appears when Translate is selected). Uses its own system prompt, because the normal one says "keep the language of the original text".
+- [x] Languages offered: English, Spanish, French, Portuguese, Japanese
+- [ ] ~~Elaborate~~ **Dropped.** On the real model it either returned the text unchanged or invented details ("many participants attending"), which is wrong for a messaging keyboard.
+- [ ] ML Kit GenAI backend: not done (see Decisions)
+
+### Translation results (Qwen3 0.6B, temperature 0.1)
+
+- English into Spanish, French, Portuguese, Japanese: readable but with mistakes (for example "la informe" instead of "el informe", and "Voulez-vous un bon jour?" for "Happy birthday!").
+- English into German and Italian: frequent mistakes, so not offered.
+- English into **Hindi, Telugu, Tamil, Bengali: unusable**. The output is invented words, often repeated until the length limit.
+- Hindi, Telugu, Tamil into English: unusable. French, German, Spanish, Japanese into English: good.
+- The larger Qwen3 1.7B (4-bit, 977 MB) was also tried. European languages got clearly better, but Hindi, Telugu and Tamil were still unusable. So a larger model of this kind does not fix Indian languages.
+
+To translate into or out of Indian languages, a dedicated translation model is needed. The existing Translate toolbar button still works for that, but it sends text online through a third-party relay (`CloudTranslationHandler`). Google ML Kit's offline translation (about 30 MB per language, 59 languages) is the likely local alternative, with a privacy trade-off to decide. Not built.
 
 ## Vertical 6: Clipboard extras
 
 Clipboard history already exists (`ClipboardHistoryAction.kt`).
 
-- [ ] Rewrite or translate a clipboard item from the history view
-- [ ] Auto-translate newly copied text into the text box (opt-in)
+- [x] "Clipboard" button in the AI Writing panel: use the current clipboard text instead of the text field. The Replace button becomes **Insert**, which puts the result in at the cursor. Sensitive clipboard items are skipped.
+- [x] A sparkle button on each clipboard history item opens AI Writing with that item loaded
+- [x] Opt-in setting "Auto-translate copied text" (off by default): when AI Writing opens with newly copied text, it translates that text into the chosen language straight away, ready to Insert. Each copied text is handled once.
+- [ ] **Device:** all three of the above
+- Not built, by design: translating in the background the moment text is copied. Android only lets the keyboard read the clipboard while it is the active keyboard, and reading every copied item (passwords, one-time codes) in the background would be a privacy risk. The auto-translate runs only when you open the panel.
 
 ## Known limits
 
-- Only Kotlin compile and dexing have been run here; the native (ndk-build) part and a full APK build have not.
-- Nothing has been run on a device yet.
+- Nothing has been run on an Android device. The APK builds, but whether it installs, starts and rewrites correctly is untested.
+- The engine was exercised on a desktop JVM, not through the Android code paths (`Context`, `ActivityManager`, WorkManager).
+- Translation quality: see above.
+- Debug-signed APK; a release build was not made.
