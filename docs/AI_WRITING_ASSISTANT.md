@@ -145,6 +145,18 @@ Clipboard history already exists (`ClipboardHistoryAction.kt`).
 - [ ] **Device:** all three of the above
 - Not built, by design: translating in the background the moment text is copied. Android only lets the keyboard read the clipboard while it is the active keyboard, and reading every copied item (passwords, one-time codes) in the background would be a privacy risk. The auto-translate runs only when you open the panel.
 
+## Testing and CI (checked 2026-11-20)
+
+- **APK:** debug, arm64, built from commit `ea52abfcf`. SHA-256 `1dc2e6b49d8408ec584eb79b9941fa7be80db666603f877122f223b10149ec7d`. Package `com.arunk140.inputmethod.latin`, minSdk 24. Signed with the repo's shared debug key (`java/shared.keystore`), so an install over a copy signed with another key fails: uninstall that one first.
+- **Gradle tests:** none can run. There are no JVM unit tests (every `test*UnitTest` task reports NO-SOURCE). The upstream instrumented suite in `tests/` needs a device and does not compile: AGP 8 rejects the `package=` attribute in `tests/AndroidManifest.xml`, and after fixing that, 62 compile errors in 20 files remain (the tests reference code that no longer exists). Left as is.
+- **Lint:** `:lintStableDebug` fails with 2100 errors, almost all in upstream resources (missing translations and base-folder dimens). The only errors in the AI Writing files are "string not translated" for the new `ai_write_*` strings, the same error every upstream string has. Two warnings: `ClipDescription.EXTRA_IS_SENSITIVE` needs API 33 (the same line already exists in the clipboard code), and a suggestion about `getUsableSpace`.
+- **Emulator here:** not possible. The sandbox has no `/dev/kvm` and no CPU virtualization flags. `adb` works but there are no devices.
+- **Cloud emulator test:** `.github/workflows/android-debug.yml` and `.github/ci/emulator-smoke.sh` build the APK (arm64 + x86_64), upload it as an artifact, then install it on an API 34 emulator, enable the keyboard, open the AI Writing settings page, open the panel, load the model, run Fix all, tap Replace, and save screenshots. **It has never run**: the first attempt failed before any step with "The job was not started because your account is locked due to a billing issue". Fix the billing lock at github.com/settings/billing, then run it from the Actions tab ("Run workflow"). The script is untested, so expect to adjust it after the first run.
+- **Other services** (all need your own account, none were set up):
+  - Firebase Test Lab: free tier is 10 virtual and 5 physical test runs per day. A Robo test only crawls the launcher screen, so it cannot drive the keyboard.
+  - Appetize.io: runs APKs in a phone browser. Sources disagree on the free tier (30 or 100 minutes a month, short sessions), too little for a 600 MB model. It likely needs an x86_64 build.
+  - BrowserStack App Live, AWS Device Farm and LambdaTest: real devices, free trials only.
+
 ## Known limits
 
 - Nothing has been run on an Android device. The APK builds, but whether it installs, starts and rewrites correctly is untested.

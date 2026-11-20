@@ -3,15 +3,16 @@ name: Android debug build and emulator test
 # Builds the debug APK, saves it as a downloadable artifact, then installs it on a real Android
 # emulator and runs the AI Writing flow end to end, saving screenshots.
 #
-# Run it by hand from the Actions tab ("Run workflow"), or it runs when the AI Writing branch
-# is pushed.
+# Run it by hand from the Actions tab ("Run workflow").
+#
+# It only runs on request for now: GitHub Actions on this account was blocked by a billing lock
+# when this was set up, so a run on every push would just fail. Once that is fixed, add this
+# under `on:` to build every push of the AI Writing branch:
+#   push:
+#     branches: [feature/ai-writing-assistant]
+#     paths-ignore: ['docs/**', '**.md']
 on:
   workflow_dispatch:
-  push:
-    branches: [feature/ai-writing-assistant]
-    paths-ignore:
-      - 'docs/**'
-      - '**.md'
 
 concurrency:
   group: android-debug-${{ github.ref }}
