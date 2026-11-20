@@ -33,9 +33,11 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      # arm64 is for phones, x86_64 is for the emulator below.
+      # arm64 is for phones, x86_64 is for the emulator below. The ABI flag is an Android Studio
+      # property, and it also marks the APK test-only, which phones refuse to install
+      # ("package appears to be invalid"). testOnly=false turns that back off.
       - name: Build debug APK
-        run: ./gradlew --no-daemon :assembleStableDebug -Pandroid.injected.build.abi=arm64-v8a,x86_64
+        run: ./gradlew --no-daemon :assembleStableDebug -Pandroid.injected.build.abi=arm64-v8a,x86_64 -Pandroid.injected.testOnly=false
 
       - name: Collect APK
         run: |

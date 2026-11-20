@@ -27,10 +27,10 @@ dropped because it invents details.
 Android Studio (Ladybug or newer, bundled JDK 21) can open the project as is. From a terminal with JDK 21 and the Android SDK:
 
 ```
-./gradlew :assembleStableDebug -Pandroid.injected.build.abi=arm64-v8a
+./gradlew :assembleStableDebug -Pandroid.injected.build.abi=arm64-v8a -Pandroid.injected.testOnly=false
 ```
 
-The `-P` flag builds only arm64, which is much faster. Output: `build/intermediates/apk/stable/debug/*.apk`.
+The first `-P` flag builds only arm64, which is much faster. It is an Android Studio property, and it also marks the APK test-only, which the phone's installer rejects with "App not installed as package appears to be invalid". The second flag turns that off; do not drop it. Output: `build/intermediates/apk/stable/debug/*.apk`.
 Built here on 2026-11-19: native part about 1.5 minutes, APK 122 MB (debug, arm64, includes the keyboard's own bundled model).
 
 ## Vertical 1: Panel UI and text I/O
@@ -147,7 +147,7 @@ Clipboard history already exists (`ClipboardHistoryAction.kt`).
 
 ## Testing and CI (checked 2026-11-20)
 
-- **APK:** debug, arm64, built from commit `ea52abfcf`. SHA-256 `1dc2e6b49d8408ec584eb79b9941fa7be80db666603f877122f223b10149ec7d`. Package `com.arunk140.inputmethod.latin`, minSdk 24. Signed with the repo's shared debug key (`java/shared.keystore`), so an install over a copy signed with another key fails: uninstall that one first.
+- **APK:** debug, arm64, app code from commit `ea52abfcf`. The first build was marked test-only and would not install; the rebuilt one has SHA-256 `2a89305013d5eb6969d33af5a32096535636dd3855d1362977c3bfc4c84e1d06`. Package `com.arunk140.inputmethod.latin`, minSdk 24. Signed with the repo's shared debug key (`java/shared.keystore`), so an install over a copy signed with another key fails: uninstall that one first.
 - **Gradle tests:** none can run. There are no JVM unit tests (every `test*UnitTest` task reports NO-SOURCE). The upstream instrumented suite in `tests/` needs a device and does not compile: AGP 8 rejects the `package=` attribute in `tests/AndroidManifest.xml`, and after fixing that, 62 compile errors in 20 files remain (the tests reference code that no longer exists). Left as is.
 - **Lint:** `:lintStableDebug` fails with 2100 errors, almost all in upstream resources (missing translations and base-folder dimens). The only errors in the AI Writing files are "string not translated" for the new `ai_write_*` strings, the same error every upstream string has. Two warnings: `ClipDescription.EXTRA_IS_SENSITIVE` needs API 33 (the same line already exists in the clipboard code), and a suggestion about `getUsableSpace`.
 - **Emulator here:** not possible. The sandbox has no `/dev/kvm` and no CPU virtualization flags. `adb` works but there are no devices.
