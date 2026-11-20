@@ -381,6 +381,7 @@ class LatinIME : InputMethodService(), LifecycleOwner, ViewModelStoreOwner, Save
         Settings.getInstance().settingsChangedListeners.add { oldSettings, newSettings ->
             val differs = (oldSettings.mActionKeyId != newSettings.mActionKeyId)
                     || (oldSettings.mShowsActionKey != newSettings.mShowsActionKey)
+                    || (oldSettings.mAiAssistKeyEnabled != newSettings.mAiAssistKeyEnabled)
 
             if (differs) {
                 invalidateKeyboard(refreshSettings = true)
@@ -408,7 +409,20 @@ class LatinIME : InputMethodService(), LifecycleOwner, ViewModelStoreOwner, Save
         super.onDestroy()
     }
 
-    /** Called by keyboard when AI-assist key is pressed. Starts permission flow. */
+    /**
+     * Called by the "~" AI key. Opens AI Writing and drafts a reply to the message on the
+     * clipboard, with the on-device model; nothing leaves the phone.
+     */
+    fun startAiReply() {
+        org.futo.inputmethod.latin.uix.actions.ai.AiWriteHandoff.requestReply()
+        uixManager.onActionActivated(org.futo.inputmethod.latin.uix.actions.ai.AiWriteAction)
+    }
+
+    /**
+     * The original screenshot-based assist: asks for screen capture and sends a screenshot to a
+     * remote server. Kept in the code but no longer started by the "~" key, which now uses
+     * [startAiReply]. Starts the permission flow.
+     */
     fun startAiAssist() {
         val targetPkg = lastEditorInfo?.packageName ?: getCurrentInputEditorInfo()?.packageName
         val perm = Intent(this, org.futo.inputmethod.latin.capture.CapturePermissionActivity::class.java).apply {

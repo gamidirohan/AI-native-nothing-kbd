@@ -1474,8 +1474,8 @@ public class LatinIMELegacy implements KeyboardActionListener,
     public void onTextInput(final String rawText) {
         // Intercept special debug/action tokens produced by some key styles.
         if ("!code/key_ai_assist".equals(rawText) || "!CODE/KEY_AI_ASSIST".equals(rawText)) {
-            // Trigger AI assist flow in the IME instead of inserting literal text.
-            ((LatinIME)mInputMethodService).startAiAssist();
+            // Trigger the on-device AI reply instead of inserting literal text.
+            ((LatinIME)mInputMethodService).startAiReply();
             return;
         }
 

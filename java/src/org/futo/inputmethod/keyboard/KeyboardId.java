@@ -80,6 +80,7 @@ public final class KeyboardId {
     public final EditorInfo mEditorInfo;
     public final boolean mClobberSettingsKey;
     public final boolean mBottomEmojiKeyEnabled;
+    public final boolean mAiAssistKeyEnabled;
     public final int mBottomActionKeyId;
     public final String mCustomActionLabel;
     public final boolean mHasShortcutKey;
@@ -98,6 +99,7 @@ public final class KeyboardId {
         mEditorInfo = params.mEditorInfo;
         mClobberSettingsKey = params.mNoSettingsKey;
         mBottomEmojiKeyEnabled = params.mBottomEmojiKeyEnabled;
+        mAiAssistKeyEnabled = params.mAiAssistKeyEnabled;
         mBottomActionKeyId = params.mBottomActionKeyId;
         mCustomActionLabel = (mEditorInfo.actionLabel != null)
                 ? mEditorInfo.actionLabel.toString() : null;
@@ -119,6 +121,7 @@ public final class KeyboardId {
                 id.mClobberSettingsKey,
                 id.mHasShortcutKey,
                 id.mBottomEmojiKeyEnabled,
+                id.mAiAssistKeyEnabled,
                 id.mBottomActionKeyId,
                 id.isMultiLine(),
                 id.imeAction(),
@@ -143,6 +146,7 @@ public final class KeyboardId {
                 && other.mClobberSettingsKey == mClobberSettingsKey
                 && other.mHasShortcutKey == mHasShortcutKey
                 && other.mBottomEmojiKeyEnabled == mBottomEmojiKeyEnabled
+                && other.mAiAssistKeyEnabled == mAiAssistKeyEnabled
                 && other.mBottomActionKeyId == mBottomActionKeyId
                 && other.isMultiLine() == isMultiLine()
                 && other.imeAction() == imeAction()

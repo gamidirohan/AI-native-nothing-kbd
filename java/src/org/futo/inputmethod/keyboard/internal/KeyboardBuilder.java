@@ -706,6 +706,8 @@ public class KeyboardBuilder<KP extends KeyboardParams> {
             final boolean languageSwitchKeyEnabledMatched = matchBoolean(caseAttr,
                     R.styleable.Keyboard_Case_bottomEmojiKeyEnabled,
                     id.mBottomEmojiKeyEnabled);
+            final boolean aiAssistKeyEnabledMatched = matchBoolean(caseAttr,
+                    R.styleable.Keyboard_Case_aiAssistKeyEnabled, id.mAiAssistKeyEnabled);
             final boolean isMultiLineMatched = matchBoolean(caseAttr,
                     R.styleable.Keyboard_Case_isMultiLine, id.isMultiLine());
             final boolean imeActionMatched = matchInteger(caseAttr,
@@ -724,6 +726,7 @@ public class KeyboardBuilder<KP extends KeyboardParams> {
                     && keyboardThemeMacthed && modeMatched && navigateNextMatched
                     && navigatePreviousMatched && passwordInputMatched && clobberSettingsKeyMatched
                     && hasShortcutKeyMatched  && languageSwitchKeyEnabledMatched
+                    && aiAssistKeyEnabledMatched
                     && isMultiLineMatched && imeActionMatched && isIconDefinedMatched
                     && localeCodeMatched && languageCodeMatched && countryCodeMatched
                     && splitLayoutMatched && numberRowMatched;
@@ -752,6 +755,8 @@ public class KeyboardBuilder<KP extends KeyboardParams> {
                                 "hasShortcutKey"),
                         booleanAttr(caseAttr, R.styleable.Keyboard_Case_bottomEmojiKeyEnabled,
                                 "bottomEmojiKeyEnabled"),
+                        booleanAttr(caseAttr, R.styleable.Keyboard_Case_aiAssistKeyEnabled,
+                                "aiAssistKeyEnabled"),
                         booleanAttr(caseAttr, R.styleable.Keyboard_Case_isMultiLine,
                                 "isMultiLine"),
                         booleanAttr(caseAttr, R.styleable.Keyboard_Case_isSplitLayout,

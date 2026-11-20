@@ -236,8 +236,24 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction, refreshRequests: In
     }
 
     fun run(style: RewriteStyle) {
-        val text = inputText() ?: return
         if (!installed) return
+        if (style.usesClipboard) {
+            // Reply works on the message the user copied, and inserts the reply at the cursor.
+            val copiedMessage = readClipboardText(context)
+            if (copiedMessage == null) {
+                job?.cancel()
+                selectedStyle = style
+                state = RewriteUiState.Failed(context.getString(R.string.ai_write_reply_copy_first))
+                return
+            }
+            source = TextSource.Clipboard
+            clipboardText = copiedMessage
+        } else if (source == TextSource.Clipboard && selectedStyle?.usesClipboard == true) {
+            // Coming back from Reply to a normal option: work on the text field again.
+            source = TextSource.Field
+            fieldTarget = manager.getTextTarget()
+        }
+        val text = inputText() ?: return
         job?.cancel()
         selectedStyle = style
         copied = false
@@ -300,6 +316,12 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction, refreshRequests: In
         // Nothing to do without a model, and never interrupt something the user started.
         if (!installed || job != null) return@LaunchedEffect
 
+        // The "~" key asked for a reply to the copied message.
+        if (AiWriteHandoff.takeReplyRequest()) {
+            run(RewriteStyle.Reply)
+            return@LaunchedEffect
+        }
+
         if (source == TextSource.Field && context.getSetting(AI_AUTO_TRANSLATE_CLIPBOARD)) {
             val copiedText = readClipboardText(context)
             if (copiedText != null && AiWriteHandoff.isNewForAutoTranslate(copiedText)) {
@@ -350,6 +372,8 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction, refreshRequests: In
                 val infoText = when {
                     notice != null -> notice!!
                     text == null -> stringResource(R.string.ai_write_no_text)
+                    source == TextSource.Clipboard && selectedStyle?.usesClipboard == true ->
+                        stringResource(R.string.ai_write_target_reply, text.length)
                     source == TextSource.Clipboard -> stringResource(R.string.ai_write_target_clipboard, text.length)
                     fieldTarget?.isSelection == true -> stringResource(R.string.ai_write_target_selection, text.length)
                     else -> stringResource(R.string.ai_write_target_all, text.length)

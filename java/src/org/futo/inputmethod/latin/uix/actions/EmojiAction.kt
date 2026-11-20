@@ -93,6 +93,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.futo.inputmethod.latin.R
+import org.futo.inputmethod.latin.uix.actions.ai.AiWriteAction
 import org.futo.inputmethod.latin.common.Constants
 import org.futo.inputmethod.latin.uix.Action
 import org.futo.inputmethod.latin.uix.ActionTextEditor
@@ -789,6 +790,8 @@ val EmojiAction = Action(
     name = R.string.emoji_action_title,
     canShowKeyboard = true,
     simplePressImpl = null,
+    // Long-pressing the emoji button opens AI Writing.
+    altPressImpl = { manager, _ -> manager.activateAction(AiWriteAction) },
     persistentState = { manager ->
         val state = PersistentEmojiState()
         manager.getLifecycleScope().launch {

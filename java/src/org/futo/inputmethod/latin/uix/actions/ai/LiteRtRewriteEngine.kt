@@ -69,34 +69,63 @@ class LiteRtRewriteEngine(context: Context) : RewriteEngine {
         request: RewriteRequest,
         onPartial: (String) -> Unit
     ): String {
+        // Emoji outside the BMP make the model hang, so they are taken out here and put back at
+        // the end (see EmojiGuard).
+        val stripped = EmojiGuard.strip(request.text)
+        if (stripped.text.isBlank()) return request.text
+        val keepPositions = request.style.category == RewriteCategory.Editor
+
         val bridge = ensureBridge(modelPath)
         val temperature = request.level.temperature(request.style.category)
         val system = RewritePrompts.system(request.style)
         val steps = request.style.instructions
 
-        var current = request.text
+        var current = stripped.text
+        var lastPartialAt = 0L
         for ((index, step) in steps.withIndex()) {
             val isLast = index == steps.lastIndex
             val raw = StringBuilder()
             val instruction = RewritePrompts.instruction(request, step)
+            // Timing for `adb logcat -s LiteRtRewriteEngine`. Each streamed chunk is about one token.
+            val stepStart = System.currentTimeMillis()
+            var firstChunkAt = 0L
+            var chunks = 0
 
             try {
                 bridge.generate(
                     system,
-                    RewritePrompts.user(instruction, current),
-                    TOP_K, TOP_P, temperature
+                    RewritePrompts.user(request.style, instruction, current),
+                    TOP_K, TOP_P, temperature,
+                    maxOutputChars(current), TIMEOUT_MILLIS
                 ) { chunk ->
                     // Only the last step is shown while it streams; earlier steps are intermediate.
+                    // The preview is updated at most every PARTIAL_UPDATE_MILLIS rather than on
+                    // every token, to keep the UI work small.
                     raw.append(chunk)
-                    if (isLast) onPartial(RewriteOutput.clean(raw.toString(), request.text))
+                    chunks++
+                    val now = System.currentTimeMillis()
+                    if (firstChunkAt == 0L) firstChunkAt = now
+                    if (isLast && now - lastPartialAt >= PARTIAL_UPDATE_MILLIS) {
+                        lastPartialAt = now
+                        onPartial(RewriteOutput.clean(raw.toString(), stripped.text))
+                    }
                 }
             } catch (e: InterruptedException) {
+                dropIfStuck(bridge)
                 throw CancellationException("Rewrite cancelled").also { it.initCause(e) }
+            } catch (e: LiteRtBridge.OutputTooLongException) {
+                throw RewriteException("The AI got stuck repeating itself. Try again.", e)
+            } catch (e: LiteRtBridge.TimedOutException) {
+                dropIfStuck(bridge)
+                throw RewriteException("The AI took too long. Try again with shorter text.", e)
             } catch (e: Exception) {
+                dropIfStuck(bridge)
                 throw RewriteException("The model failed: ${e.message}", e)
             }
 
-            val output = RewriteOutput.clean(raw.toString(), request.text)
+            logStepTiming(request.style, index, stepStart, firstChunkAt, chunks, current.length)
+
+            val output = RewriteOutput.clean(raw.toString(), stripped.text)
             if (output.isBlank()) throw RewriteException("The model returned nothing. Try again.")
 
             // Editing should not change the length much. A wildly different length means the
@@ -108,7 +137,37 @@ class LiteRtRewriteEngine(context: Context) : RewriteEngine {
             }
         }
 
-        return current
+        // A reply is new text: the emoji came from the other person's message, so they are not
+        // copied into it.
+        if (request.style.usesClipboard) return current
+        return EmojiGuard.restore(current, stripped, keepPositions)
+    }
+
+    /** Room for a rewrite that is a few times longer than the input, never more than 4000. */
+    private fun maxOutputChars(input: String): Int = (input.length * 4 + 400).coerceAtMost(4000)
+
+    /**
+     * A generation that could not be stopped leaves the native side busy. That instance is
+     * abandoned (not closed, which could crash) and a fresh one is loaded next time.
+     */
+    private fun dropIfStuck(current: LiteRtBridge) {
+        if (current.isStuck && bridge === current) {
+            Log.w(TAG, "Model did not stop; loading a fresh one next time")
+            bridge = null
+            loadedPath = null
+        }
+    }
+
+    private fun logStepTiming(style: RewriteStyle, step: Int, start: Long, firstChunkAt: Long, chunks: Int, inputChars: Int) {
+        val end = System.currentTimeMillis()
+        val firstTokenMs = if (firstChunkAt > 0) firstChunkAt - start else -1
+        val decodeMs = if (firstChunkAt > 0) end - firstChunkAt else 0
+        val tokensPerSecond = if (decodeMs > 0 && chunks > 1) (chunks - 1) * 1000.0 / decodeMs else 0.0
+        Log.i(
+            TAG, "timing style=${style.name} step=$step inputChars=$inputChars " +
+                    "firstTokenMs=$firstTokenMs totalMs=${end - start} tokens=$chunks " +
+                    "tokensPerSec=${"%.1f".format(tokensPerSecond)}"
+        )
     }
 
     private fun isPlausibleEdit(before: String, after: String): Boolean {
@@ -127,7 +186,9 @@ class LiteRtRewriteEngine(context: Context) : RewriteEngine {
         }
 
         try {
+            val loadStart = System.currentTimeMillis()
             val created = LiteRtBridge(modelPath, appContext.cacheDir.path)
+            Log.i(TAG, "timing model loaded in ${System.currentTimeMillis() - loadStart} ms")
             bridge = created
             loadedPath = modelPath
             return created
@@ -163,5 +224,8 @@ class LiteRtRewriteEngine(context: Context) : RewriteEngine {
     private companion object {
         const val TOP_K = 40
         const val TOP_P = 0.9
+        // Each step normally takes 1-2 s on a desktop CPU; phones are slower.
+        const val TIMEOUT_MILLIS = 60_000L
+        const val PARTIAL_UPDATE_MILLIS = 100L
     }
 }

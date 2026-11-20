@@ -165,6 +165,7 @@ fun ResizeScreen(navController: NavHostController = rememberNavController()) {
             builder.setSubtype(currentSubtype)
             builder.setVoiceInputKeyEnabled(settingsValues.mShowsVoiceInputKey)
             builder.setBottomActionKey(settingsValues.mShowsActionKey, settingsValues.mActionKeyId)
+            builder.setAiAssistKeyEnabled(settingsValues.mAiAssistKeyEnabled)
             builder.setSplitLayoutEnabledByUser(
                 ProductionFlags.IS_SPLIT_KEYBOARD_SUPPORTED
                         && settingsValues.mIsSplitKeyboardEnabled

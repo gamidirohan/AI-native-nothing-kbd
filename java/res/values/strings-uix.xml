@@ -21,6 +21,9 @@
     <string name="ai_write_funny">Funny</string>
     <string name="ai_write_linkedin">LinkedIn</string>
     <string name="ai_write_shorten">Shorten</string>
+    <string name="ai_write_reply">Reply</string>
+    <string name="ai_write_reply_copy_first">Copy the message you want to reply to, then tap Reply.</string>
+    <string name="ai_write_target_reply">Replying to the copied message · %1$d characters</string>
     <string name="ai_write_translate">Translate</string>
     <string name="ai_write_level_light">Light</string>
     <string name="ai_write_level_balanced">Balanced</string>

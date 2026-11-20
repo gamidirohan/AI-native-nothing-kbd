@@ -58,6 +58,11 @@ private const val PUNCTUATION_STEP =
     "Add the missing punctuation, apostrophes and capital letters to the text. Keep the same words." +
             "\n\nExample:\nText: dont be late its important\nResult: Don't be late. It's important."
 
+// Reply sends the copied message itself as the user's turn (see RewritePrompts.user); the
+// instruction lives in the system prompt. Asking "write a reply to this text" instead made the
+// small model repeat or rephrase the message.
+private const val REPLY_STEP = ""
+
 /** Replaced with the target language name when the instruction is built. */
 const val LANGUAGE_PLACEHOLDER = "{language}"
 
@@ -76,12 +81,21 @@ enum class RewriteStyle(
     @StringRes val label: Int,
     val instructions: List<String>,
     /** True if the user has to choose a target language (the instruction uses [LANGUAGE_PLACEHOLDER]). */
-    val needsLanguage: Boolean = false
+    val needsLanguage: Boolean = false,
+    /** True if this works on a copied message instead of the text field, and inserts the result. */
+    val usesClipboard: Boolean = false
 ) {
     // Editor
     FixAll(
         RewriteCategory.Editor, R.string.ai_write_fix_all,
         listOf(SPELLING_STEP, GRAMMAR_STEP, PUNCTUATION_STEP)
+    ),
+
+    // Drafts a reply to a message the user copied from the chat.
+    Reply(
+        RewriteCategory.Tone, R.string.ai_write_reply,
+        listOf(REPLY_STEP),
+        usesClipboard = true
     ),
 
     // Tone
@@ -139,8 +153,15 @@ object RewritePrompts {
             "Reply with only the translation. " +
             "Do not add explanations, quotes, notes or a preamble."
 
-    fun system(style: RewriteStyle): String =
-        if (style.needsLanguage) SYSTEM_TRANSLATE else SYSTEM_REWRITE
+    private const val SYSTEM_REPLY = "You are the user, replying to a text message you received " +
+            "from a friend or colleague. Answer what they said in one or two short sentences, " +
+            "in the same language. Output only your reply."
+
+    fun system(style: RewriteStyle): String = when {
+        style.usesClipboard -> SYSTEM_REPLY
+        style.needsLanguage -> SYSTEM_TRANSLATE
+        else -> SYSTEM_REWRITE
+    }
 
     /** The instruction for one step, with the formatting level and target language applied. */
     fun instruction(request: RewriteRequest, step: String): String {
@@ -167,5 +188,6 @@ object RewritePrompts {
         }
     }
 
-    fun user(instruction: String, text: String): String = "$instruction\n\nText:\n$text"
+    fun user(style: RewriteStyle, instruction: String, text: String): String =
+        if (style.usesClipboard) text else "$instruction\n\nText:\n$text"
 }

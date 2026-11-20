@@ -119,6 +119,7 @@ public final class KeyboardLayoutSet {
         boolean mVoiceInputKeyEnabled;
         boolean mNoSettingsKey;
         boolean mBottomEmojiKeyEnabled;
+        boolean mAiAssistKeyEnabled;
         int mBottomActionKeyId;
         RichInputMethodSubtype mSubtype;
         boolean mIsSpellChecker;
@@ -326,6 +327,11 @@ public final class KeyboardLayoutSet {
 
         public Builder setVoiceInputKeyEnabled(final boolean enabled) {
             mParams.mVoiceInputKeyEnabled = enabled;
+            return this;
+        }
+
+        public Builder setAiAssistKeyEnabled(final boolean enabled) {
+            mParams.mAiAssistKeyEnabled = enabled;
             return this;
         }
 

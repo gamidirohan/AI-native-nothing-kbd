@@ -2026,7 +2026,7 @@ public final class InputLogic {
     private void onAiAssistKeyPressed() {
         final android.inputmethodservice.InputMethodService ims = mLatinIMELegacy.getInputMethodService();
         if (ims instanceof org.futo.inputmethod.latin.LatinIME) {
-            ((org.futo.inputmethod.latin.LatinIME) ims).startAiAssist();
+            ((org.futo.inputmethod.latin.LatinIME) ims).startAiReply();
         }
     }
 

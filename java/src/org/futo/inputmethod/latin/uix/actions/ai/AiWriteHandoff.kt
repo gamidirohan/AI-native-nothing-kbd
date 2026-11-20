@@ -17,6 +17,21 @@ object AiWriteHandoff {
     @Volatile
     private var lastAutoHandled: String? = null
 
+    @Volatile
+    private var replyRequested = false
+
+    /** The "~" key: open AI Writing and draft a reply to the copied message. */
+    fun requestReply() {
+        replyRequested = true
+    }
+
+    /** Returns true once after [requestReply]. */
+    fun takeReplyRequest(): Boolean {
+        val requested = replyRequested
+        replyRequested = false
+        return requested
+    }
+
     fun offerClipboardText(text: String) {
         pendingClipboardText = text
     }

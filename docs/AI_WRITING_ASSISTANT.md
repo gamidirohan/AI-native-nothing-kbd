@@ -207,6 +207,16 @@ Not covered:
 - The Translate language picker moved into the result card's top line, and only shows while Translate is selected.
 - Still works: the sparkle button on clipboard history items and the auto-translate setting. These are separate from the removed Clipboard button.
 
+## Round 4 (2026-11-20): reply key, emoji fix, limits
+
+- **"~" key hidden by default.** It came from the earlier "ai stuff" commit and sent a screenshot to a remote server. It is now off unless "AI reply key (~)" is turned on in AI Writing settings. With it off, the bottom row goes back to its original layout, with the spacebar at full width (new `aiAssistKeyEnabled` keyboard condition). The screenshot code (`LatinIME.startAiAssist`, `capture/`) is still in the repo but nothing calls it.
+- **The "~" key now drafts a reply on the phone.** Copy a message, tap ~, and AI Writing opens with **Reply**, which is also a chip in the panel. It reads the copied message and Insert types the reply at the cursor; nothing leaves the phone. On the real model, sending the message itself as the chat turn (with the instruction in the system prompt) gave usable replies for 4 of 6 test messages. Asking "write a reply to this text" mostly repeated the message.
+- **Long-pressing the emoji button opens AI Writing**, both the toolbar one and the bottom-row one.
+- **Emoji freeze fixed.** Emoji outside the BMP made the model hang or crash; they are now kept away from it by `EmojiGuard`. See [needs-access/runtime-risks.md](needs-access/runtime-risks.md).
+- **Generation limits:** an output cap and a 60 s timeout. A model that cannot be stopped is abandoned and a fresh one loaded.
+- **Timing logs** for adb, and the streaming preview updates at most every 100 ms.
+- Blocked work and the performance plan are in [needs-access/](needs-access/README.md).
+
 ## Known limits
 
 - Nothing has been run on an Android device. The APK builds, but whether it installs, starts and rewrites correctly is untested.

@@ -29,6 +29,8 @@ import org.futo.inputmethod.latin.uix.settings.ScreenTitle
 import org.futo.inputmethod.latin.uix.settings.ScrollableList
 import org.futo.inputmethod.latin.uix.settings.SettingItem
 import org.futo.inputmethod.latin.uix.settings.SettingToggleDataStore
+import org.futo.inputmethod.latin.uix.settings.SettingToggleSharedPrefs
+import org.futo.inputmethod.latin.settings.Settings
 import org.futo.inputmethod.latin.uix.settings.Tip
 
 private fun formatMegabytes(bytes: Long): String = "${bytes / (1024 * 1024)} MB"
@@ -96,7 +98,7 @@ fun AiWritingScreen(navController: NavHostController = rememberNavController()) 
         Tip(
             "AI Writing fixes grammar and spelling and changes the tone of your text. " +
                     "It runs on your phone with a downloaded model, so your text is not sent anywhere. " +
-                    "Open it from the sparkle button on the keyboard toolbar."
+                    "Open it from the sparkle button on the keyboard toolbar, or long-press the emoji button."
         )
 
         val modelStatus = when {
@@ -148,6 +150,15 @@ fun AiWritingScreen(navController: NavHostController = rememberNavController()) 
             title = "Download on Wi-Fi only",
             subtitle = "Avoid using mobile data for the model download",
             setting = AI_DOWNLOAD_WIFI_ONLY
+        )
+
+        SettingToggleSharedPrefs(
+            title = "AI reply key (~)",
+            subtitle = "Adds a ~ key next to the spacebar. Copy a message, tap ~, and AI " +
+                    "Writing drafts a reply on your phone. Long-pressing the emoji button " +
+                    "opens AI Writing either way.",
+            key = Settings.PREF_AI_ASSIST_KEY,
+            default = false
         )
 
         SettingToggleDataStore(

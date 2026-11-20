@@ -507,6 +507,7 @@
         <attr name="clobberSettingsKey" format="boolean" />
         <attr name="hasShortcutKey" format="boolean" />
         <attr name="bottomEmojiKeyEnabled" format="boolean" />
+        <attr name="aiAssistKeyEnabled" format="boolean" />
         <attr name="isMultiLine" format="boolean" />
         <attr name="imeAction" format="enum">
             <!-- This should be aligned with
