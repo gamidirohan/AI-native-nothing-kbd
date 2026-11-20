@@ -25,13 +25,9 @@
     <string name="ai_write_level_light">Light</string>
     <string name="ai_write_level_balanced">Balanced</string>
     <string name="ai_write_level_strong">Strong</string>
-    <string name="ai_write_level_label">Strength: %1$s</string>
     <string name="ai_write_translate_to">To: %1$s</string>
     <string name="ai_write_translate_note">On-device, basic quality</string>
     <string name="ai_write_target_clipboard">Clipboard · %1$d characters</string>
-    <string name="ai_write_clipboard_empty">Nothing to use on the clipboard.</string>
-    <string name="ai_write_use_clipboard">Clipboard</string>
-    <string name="ai_write_use_field">Text field</string>
     <string name="ai_write_insert">Insert</string>
     <string name="ai_write_settings">Settings</string>
     <string name="ai_write_import_file">Import file</string>
@@ -44,7 +40,6 @@
     <string name="ai_write_no_text">No text found. Type something or select text first.</string>
     <string name="ai_write_refresh">Refresh</string>
     <string name="ai_write_idle_hint">Pick an option above to rewrite your text.</string>
-    <string name="ai_write_strength_help">Strength %1$s. Light keeps your words, Strong may rephrase.</string>
     <string name="ai_write_working">Working…</string>
     <string name="ai_write_replace">Replace</string>
     <string name="ai_write_copy">Copy</string>

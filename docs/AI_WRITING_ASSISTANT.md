@@ -199,6 +199,14 @@ Not covered:
 - Only the most recent autocorrection is tracked for the delete-within-a-minute rule.
 - Not tested on a device.
 
+## Round 3 panel changes (2026-11-20)
+
+- Option chips are smaller: 12sp label text, 10x5 dp padding, no 48 dp minimum height. The result text is 14sp, so more of it fits.
+- Removed from the panel: the Strength control (rewrites always use Balanced), the Clipboard / Text field switch, and the Refresh text button.
+- Refresh is now an icon in the title bar, left of the settings icon. It reads the text field again and re-runs the last option, or Fix all.
+- The Translate language picker moved into the result card's top line, and only shows while Translate is selected.
+- Still works: the sparkle button on clipboard history items and the auto-translate setting. These are separate from the removed Clipboard button.
+
 ## Known limits
 
 - Nothing has been run on an Android device. The APK builds, but whether it installs, starts and rewrites correctly is untested.

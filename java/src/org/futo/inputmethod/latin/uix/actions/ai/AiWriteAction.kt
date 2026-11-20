@@ -4,7 +4,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,7 +12,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -31,8 +29,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -87,15 +87,15 @@ private fun Pill(
     Surface(
         color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceBright,
         contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onBackground,
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(16.dp),
         onClick = onClick,
-        modifier = modifier.minimumInteractiveComponentSize()
+        modifier = modifier
     ) {
         Box(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text(label, maxLines = 1)
+            Text(label, maxLines = 1, style = MaterialTheme.typography.labelMedium)
         }
     }
 }
@@ -201,14 +201,12 @@ private fun ModelDownloadCard(
 }
 
 @Composable
-private fun AiWriteScreen(manager: KeyboardManagerForAction) {
+private fun AiWriteScreen(manager: KeyboardManagerForAction, refreshRequests: Int) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val engine = remember { RewriteEngineProvider.get(context) }
 
-    val levelSetting = useDataStore(AI_FORMAT_LEVEL)
     val languageSetting = useDataStore(AI_TRANSLATE_TARGET)
-    val level = FormatLevel.fromOrdinal(levelSetting.value)
     val languageCode = languageSetting.value
 
     var selectedStyle by remember { mutableStateOf<RewriteStyle?>(null) }
@@ -248,7 +246,8 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction) {
         job = scope.launch {
             try {
                 // Read the settings at the moment of the tap, so a change is never missed.
-                val currentLevel = FormatLevel.fromOrdinal(context.getSetting(AI_FORMAT_LEVEL))
+                // The strength control was removed from the panel; Balanced is the tuned default.
+                val currentLevel = FormatLevel.Balanced
                 val currentLanguage = AiTranslateLanguages.name(context.getSetting(AI_TRANSLATE_TARGET))
 
                 val result = engine.rewrite(
@@ -281,18 +280,9 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction) {
         rerun()
     }
 
-    fun useClipboard() {
-        job?.cancel()
-        val text = readClipboardText(context)
-        if (text == null) {
-            notice = context.getString(R.string.ai_write_clipboard_empty)
-            return
-        }
-        source = TextSource.Clipboard
-        clipboardText = text
-        copied = false
-        notice = null
-        rerun()
+    // Refresh button in the title bar: read the text field again and re-run the last option.
+    LaunchedEffect(refreshRequests) {
+        if (refreshRequests > 0) useField()
     }
 
     // When the panel opens, and again once a missing model has been installed: start right away.
@@ -331,81 +321,12 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction) {
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         // Fix all first, then the tones.
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             items(RewriteStyle.entries) { style ->
                 Pill(
                     label = stringResource(style.label),
                     selected = selectedStyle == style
                 ) { run(style) }
-            }
-        }
-
-        // Controls. Scrolls sideways on narrow screens instead of squeezing the buttons.
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.horizontalScroll(rememberScrollState())
-        ) {
-            // Strength: tap to cycle Light -> Balanced -> Strong, then the current style runs again.
-            TextButton(
-                onClick = {
-                    val next = (level.ordinal + 1) % FormatLevel.entries.size
-                    scope.launch {
-                        // Save first: run() reads the saved level.
-                        context.setSetting(AI_FORMAT_LEVEL, next)
-                        selectedStyle?.let { run(it) }
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.ai_write_strength_help, context.getString(FormatLevel.fromOrdinal(next).label)),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                },
-                contentPadding = compactTextButtonPadding
-            ) {
-                Text(stringResource(R.string.ai_write_level_label, stringResource(level.label)))
-            }
-
-            // Language picker, only for styles that need one.
-            if (selectedStyle?.needsLanguage == true) {
-                Box {
-                    TextButton(onClick = { languageMenuOpen = true }, contentPadding = compactTextButtonPadding) {
-                        Text(stringResource(R.string.ai_write_translate_to, AiTranslateLanguages.name(languageCode)))
-                    }
-                    DropdownMenu(expanded = languageMenuOpen, onDismissRequest = { languageMenuOpen = false }) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.ai_write_translate_note)) },
-                            onClick = {},
-                            enabled = false
-                        )
-                        AiTranslateLanguages.languages.forEach { (code, name) ->
-                            DropdownMenuItem(
-                                text = { Text(name) },
-                                onClick = {
-                                    languageMenuOpen = false
-                                    scope.launch {
-                                        // Save first: run() reads the saved language.
-                                        context.setSetting(AI_TRANSLATE_TARGET, code)
-                                        run(RewriteStyle.Translate)
-                                    }
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (source == TextSource.Field) {
-                TextButton(onClick = { useClipboard() }, contentPadding = compactTextButtonPadding) {
-                    Text(stringResource(R.string.ai_write_use_clipboard))
-                }
-            } else {
-                TextButton(onClick = { useField() }, contentPadding = compactTextButtonPadding) {
-                    Text(stringResource(R.string.ai_write_use_field))
-                }
-            }
-            TextButton(onClick = { if (source == TextSource.Clipboard) useClipboard() else useField() },
-                contentPadding = compactTextButtonPadding) {
-                Text(stringResource(R.string.ai_write_refresh))
             }
         }
 
@@ -441,19 +362,53 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction) {
                 }
                 Column(
                     modifier = Modifier
-                        .padding(12.dp)
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
                         .verticalScroll(rememberScrollState())
                 ) {
-                    // What is being rewritten: selection, whole field or clipboard.
-                    Text(
-                        text = infoText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-                    )
+                    // What is being rewritten (selection, whole field or clipboard), and the
+                    // target language when translating.
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = infoText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                            maxLines = 1,
+                            modifier = Modifier.weight(1f)
+                        )
+                    // Language picker, only for styles that need one.
+                    if (selectedStyle?.needsLanguage == true) {
+                        Box {
+                            TextButton(onClick = { languageMenuOpen = true }, contentPadding = compactTextButtonPadding) {
+                                Text(stringResource(R.string.ai_write_translate_to, AiTranslateLanguages.name(languageCode)))
+                            }
+                            DropdownMenu(expanded = languageMenuOpen, onDismissRequest = { languageMenuOpen = false }) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.ai_write_translate_note)) },
+                                    onClick = {},
+                                    enabled = false
+                                )
+                                AiTranslateLanguages.languages.forEach { (code, name) ->
+                                    DropdownMenuItem(
+                                        text = { Text(name) },
+                                        onClick = {
+                                            languageMenuOpen = false
+                                            scope.launch {
+                                                // Save first: run() reads the saved language.
+                                                context.setSetting(AI_TRANSLATE_TARGET, code)
+                                                run(RewriteStyle.Translate)
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    }
                     Text(
                         text = body,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = if (state is RewriteUiState.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier.padding(top = 4.dp)
+                        modifier = Modifier.padding(top = 2.dp)
                     )
                 }
             }
@@ -513,6 +468,8 @@ val AiWriteAction = Action(
     persistentState = { AiWritePersistentState() },
     canShowKeyboard = false,
     windowImpl = { manager, _ ->
+        // Taps on the title bar's refresh button, read by the panel.
+        val refreshRequests = mutableIntStateOf(0)
         object : ActionWindow {
             @Composable
             override fun windowName(): String = stringResource(R.string.ai_write_action_title)
@@ -522,6 +479,12 @@ val AiWriteAction = Action(
                 super.WindowTitleBar(rowScope)
 
                 val context = LocalContext.current
+                IconButton(onClick = { refreshRequests.intValue++ }) {
+                    Icon(
+                        Icons.Default.Refresh,
+                        contentDescription = stringResource(R.string.ai_write_refresh)
+                    )
+                }
                 IconButton(onClick = { openAiWritingSettings(context) }) {
                     Icon(
                         painterResource(id = R.drawable.settings),
@@ -532,7 +495,7 @@ val AiWriteAction = Action(
 
             @Composable
             override fun WindowContents(keyboardShown: Boolean) {
-                AiWriteScreen(manager)
+                AiWriteScreen(manager, refreshRequests.intValue)
             }
 
             override fun close() {}
