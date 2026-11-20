@@ -39,6 +39,7 @@ import org.futo.inputmethod.latin.DictionaryFacilitator;
 import org.futo.inputmethod.latin.LastComposedWord;
 import org.futo.inputmethod.latin.LatinIMELegacy;
 import org.futo.inputmethod.latin.NgramContext;
+import org.futo.inputmethod.latin.learning.LearnedWords;
 import org.futo.inputmethod.latin.RichInputConnection;
 import org.futo.inputmethod.latin.Suggest;
 import org.futo.inputmethod.latin.Suggest.OnGetSuggestedWordsCallback;
@@ -1313,10 +1314,22 @@ public final class InputLogic {
                     settingsValues, currentKeyboardScriptId);
             if (!TextUtils.isEmpty(wordBeingDeleted)) {
                 unlearnWord(wordBeingDeleted, settingsValues, Constants.EVENT_BACKSPACE);
+
+                // Deleting a word that was just autocorrected counts as rejecting the correction.
+                final String rejectedTypedWord = LearnedWords.onWordDeleted(wordBeingDeleted);
+                if (rejectedTypedWord != null && shouldLearnFromCorrections(settingsValues)) {
+                    LearnedWords.onAutocorrectRejected(rejectedTypedWord);
+                }
                 return true;
             }
         }
         return false;
+    }
+
+    /** Not in incognito or password fields, nor when the user turned learning off. */
+    private static boolean shouldLearnFromCorrections(final SettingsValues settingsValues) {
+        return settingsValues.mLearnFromCorrections
+                && !settingsValues.mInputAttributes.mNoLearning;
     }
 
     void unlearnWord(final String word, final SettingsValues settingsValues, final int eventType) {
@@ -1802,6 +1815,11 @@ public final class InputLogic {
             unlearnWord(committedWordString, inputTransaction.mSettingsValues,
                     Constants.EVENT_REVERT);
         }
+        // The user undid an autocorrection: remember the word they typed.
+        LearnedWords.clearPendingAutocorrection();
+        if (shouldLearnFromCorrections(inputTransaction.mSettingsValues)) {
+            LearnedWords.onAutocorrectRejected(originallyTypedWordString);
+        }
         final String stringToCommit = originallyTypedWord +
                 (usePhantomSpace ? "" : separatorString);
         final SpannableString textToCommit = new SpannableString(stringToCommit);
@@ -2268,6 +2286,7 @@ public final class InputLogic {
                         : "";
                 StatsUtils.onAutoCorrection(typedWord, stringToCommit, isBatchMode,
                         mDictionaryFacilitator, prevWordsContext);
+                LearnedWords.onAutocorrected(typedWord, stringToCommit);
                 StatsUtils.onWordCommitAutoCorrect(stringToCommit, isBatchMode);
             } else {
                 StatsUtils.onWordCommitUserTyped(stringToCommit, isBatchMode);

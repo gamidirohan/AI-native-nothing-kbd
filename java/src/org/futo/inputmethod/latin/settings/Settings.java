@@ -68,6 +68,8 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     public static final String PREF_SHOW_SUGGESTIONS = "show_suggestions";
     public static final String PREF_KEY_USE_CONTACTS_DICT = "pref_key_use_contacts_dict";
     public static final String PREF_KEY_USE_PERSONALIZED_DICTS = "pref_key_use_personalized_dicts";
+    // Remember words the user keeps after autocorrect changes them (see learning/LearnedWords).
+    public static final String PREF_LEARN_FROM_CORRECTIONS = "pref_learn_from_corrections";
     public static final String PREF_KEY_USE_TRANSFORMER_LM = "pref_key_use_transformer_lm";
     public static final String PREF_KEY_USE_DOUBLE_SPACE_PERIOD =
             "pref_key_use_double_space_period";

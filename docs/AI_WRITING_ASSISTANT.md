@@ -177,6 +177,28 @@ Clipboard history already exists (`ClipboardHistoryAction.kt`).
   - With the strength set and the length at Default, each press is 10 ms.
 - Not tested on a device: all of the above.
 
+## Learning from rejected autocorrections (2026-11-20)
+
+The problem: typing Telugu-English, Hindi-English or Tamil-English in Latin letters, autocorrect changes words such as "vastanu" or "enna" into English words, and the user undoes it every time. The keyboard has no Latin-script Telugu, Hindi or Tamil dictionary, so these words look like typos.
+
+What existed before: backspace straight after an autocorrection already restored the typed word, but it then removed the *corrected* word from the keyboard's memory and did not remember the *typed* one, so the same correction happened again next time. Deleting the corrected word later was not noticed at all.
+
+What it does now (`java/src/org/futo/inputmethod/latin/learning/`):
+
+- **Notice:** undoing an autocorrection with backspace, or deleting the corrected word within 60 seconds, counts as one rejection of the word the user typed.
+- **Stop autocorrecting:** after 1 rejection the typed word is never autocorrected again, in any capitalization. This hooks into `Suggest.obtainNonBatchedInputSuggestedWords`, the one place both the dictionary and the transformer-model paths decide autocorrect.
+- **Suggest it:** after 2 rejections the word is added to the Android personal dictionary, for all languages, unless it is already there. That makes it appear in suggestions and completions. Near-misspellings can then be corrected *to* it, and the transformer model sees it in its glossary.
+- **Not learned:** password and incognito fields, URLs, numbers, single letters, or anything with digits or symbols. Native-script words (Telugu, Devanagari, Tamil) are accepted.
+- **Settings:** Text Prediction -> Learned Words. A "Learn from my corrections" switch (default on), the list with each word's count, remove one, forget all, and a link to the personal dictionary. Turning the switch off stops new learning; words already on the list stay respected until removed.
+- **Storage:** `learned_words.json` in app storage, up to 500 words, least recently used dropped first. Nothing is read or written while the phone is locked after a restart.
+- **Tests:** `src/test/java/org/futo/inputmethod/latin/learning/LearnedWordsCoreTest.kt`, 12 JVM unit tests of the rules. They run with `./gradlew :testStableDebugUnitTest` and pass. These are the first unit tests in the repo.
+
+Not covered:
+- Gesture typing autocorrect is a separate path and is unchanged.
+- Fixing an autocorrection by tapping the original word in the suggestion strip is not counted.
+- Only the most recent autocorrection is tracked for the delete-within-a-minute rule.
+- Not tested on a device.
+
 ## Known limits
 
 - Nothing has been run on an Android device. The APK builds, but whether it installs, starts and rewrites correctly is untested.

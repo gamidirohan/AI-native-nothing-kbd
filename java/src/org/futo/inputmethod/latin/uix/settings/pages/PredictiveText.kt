@@ -73,6 +73,16 @@ fun PredictiveTextScreen(navController: NavHostController = rememberNavControlle
         )
 
         NavigationItem(
+            title = "Learned Words",
+            subtitle = "Words you kept after autocorrect changed them",
+            style = NavigationItemStyle.HomeTertiary,
+            icon = painterResource(id = R.drawable.book),
+            navigate = {
+                navController.navigate("learnedWords")
+            }
+        )
+
+        NavigationItem(
             title = "Blacklisted Suggestions",
             style = NavigationItemStyle.HomeSecondary,
             icon = painterResource(id = R.drawable.file_text),

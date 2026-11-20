@@ -21,6 +21,7 @@ import org.futo.inputmethod.latin.uix.settings.pages.DeveloperScreen
 import org.futo.inputmethod.latin.uix.settings.pages.HelpScreen
 import org.futo.inputmethod.latin.uix.settings.pages.HomeScreen
 import org.futo.inputmethod.latin.uix.settings.pages.LanguagesScreen
+import org.futo.inputmethod.latin.uix.settings.pages.LearnedWordsScreen
 import org.futo.inputmethod.latin.uix.settings.pages.PaymentScreen
 import org.futo.inputmethod.latin.uix.settings.pages.PaymentThankYouScreen
 import org.futo.inputmethod.latin.uix.settings.pages.PredictiveTextScreen
@@ -64,6 +65,7 @@ fun SettingsNavigator(
         composable("developer") { DeveloperScreen(navController) }
         composable("devtextedit") { DevEditTextVariationsScreen(navController) }
         composable("blacklist") { BlacklistScreen(navController) }
+        composable("learnedWords") { LearnedWordsScreen(navController) }
         composable("payment") { PaymentScreen(navController) { navController.navigateUp() } }
         composable("paid") { PaymentThankYouScreen { navController.navigateUp() } }
         composable("credits") { CreditsScreen(navController) }

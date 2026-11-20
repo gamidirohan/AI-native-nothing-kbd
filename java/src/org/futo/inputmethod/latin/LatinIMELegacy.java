@@ -73,6 +73,7 @@ import org.futo.inputmethod.keyboard.MainKeyboardView;
 import org.futo.inputmethod.latin.Suggest.OnGetSuggestedWordsCallback;
 import org.futo.inputmethod.latin.SuggestedWords.SuggestedWordInfo;
 import org.futo.inputmethod.latin.common.Constants;
+import org.futo.inputmethod.latin.learning.LearnedWords;
 import org.futo.inputmethod.latin.common.CoordinateUtils;
 import org.futo.inputmethod.latin.common.InputPointers;
 import org.futo.inputmethod.latin.define.DebugFlags;
@@ -579,6 +580,7 @@ public class LatinIMELegacy implements KeyboardActionListener,
 
     public void onCreate() {
         Settings.init(mInputMethodService);
+        LearnedWords.load(mInputMethodService);
         RichInputMethodManager.init(mInputMethodService);
         mRichImm = RichInputMethodManager.getInstance();
         AudioAndHapticFeedbackManager.init(mInputMethodService);

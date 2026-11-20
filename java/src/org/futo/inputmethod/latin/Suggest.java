@@ -25,6 +25,7 @@ import static org.futo.inputmethod.latin.define.DecoderSpecificConstants.SHOULD_
 import org.futo.inputmethod.keyboard.Keyboard;
 import org.futo.inputmethod.latin.SuggestedWords.SuggestedWordInfo;
 import org.futo.inputmethod.latin.common.Constants;
+import org.futo.inputmethod.latin.learning.LearnedWords;
 import org.futo.inputmethod.latin.common.StringUtils;
 import org.futo.inputmethod.latin.define.DebugFlags;
 import org.futo.inputmethod.latin.settings.SettingsValuesForSuggestion;
@@ -245,6 +246,11 @@ public final class Suggest {
             }
         }
 
+        // Words the user has kept after autocorrect changed them (for example Telugu, Hindi or
+        // Tamil typed in English letters) are left as typed.
+        final boolean isLearnedWord = !resultsArePredictions && LearnedWords.isKept(typedWordString);
+        final boolean willAutoCorrect = hasAutoCorrection && !isLearnedWord;
+
         final SuggestedWordInfo typedWordInfo = new SuggestedWordInfo(typedWordString,
                 "" /* prevWordsContext */, SuggestedWordInfo.MAX_SCORE,
                 SuggestedWordInfo.KIND_TYPED,
@@ -274,11 +280,12 @@ public final class Suggest {
         }
 
         final boolean isTypedWordValid = firstOcurrenceOfTypedWordInSuggestions > -1
-                || (!resultsArePredictions && !allowsToBeAutoCorrected);
+                || (!resultsArePredictions && !allowsToBeAutoCorrected)
+                || isLearnedWord;
         return new SuggestedWords(suggestionsList,
                 suggestionResults.mRawSuggestions, typedWordInfo,
                 isTypedWordValid,
-                hasAutoCorrection /* willAutoCorrect */,
+                willAutoCorrect /* willAutoCorrect */,
                 false /* isObsoleteSuggestions */, inputStyle, sequenceNumber);
     }
 
