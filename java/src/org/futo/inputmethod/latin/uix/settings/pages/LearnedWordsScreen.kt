@@ -33,6 +33,7 @@ fun LearnedWordsScreen(navController: NavHostController = rememberNavController(
     LaunchedEffect(Unit) { LearnedWords.load(context) }
 
     val words by LearnedWords.words.collectAsState()
+    val corrections by LearnedWords.corrections.collectAsState()
     var confirmClear by remember { mutableStateOf(false) }
 
     if (confirmClear) {
@@ -44,6 +45,7 @@ fun LearnedWordsScreen(navController: NavHostController = rememberNavController(
                 TextButton(onClick = {
                     confirmClear = false
                     LearnedWords.clear()
+                    // Also forgets the learned typos.
                 }) { Text("Forget all") }
             },
             dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancel") } }
@@ -54,11 +56,14 @@ fun LearnedWordsScreen(navController: NavHostController = rememberNavController(
         ScreenTitle("Learned Words", showBack = true, navController)
 
         Tip(
-            "When autocorrect changes a word and you undo it with backspace, or delete the " +
-                    "corrected word within a minute, the keyboard remembers the word you typed. " +
-                    "It is not autocorrected again. After the second time, it is also added to " +
-                    "your personal dictionary so it shows up in suggestions. This helps with " +
-                    "Telugu, Hindi or Tamil typed in English letters, names and slang."
+            "Words you keep: when autocorrect changes a word and you undo it with backspace, " +
+                    "or delete the corrected word within a minute, the keyboard remembers the " +
+                    "word you typed and stops correcting it. After the second time it is also " +
+                    "added to your personal dictionary so it shows up in suggestions. This helps " +
+                    "with Telugu, Hindi or Tamil typed in English letters, names and slang.\n\n" +
+                    "Your typos: when you delete a word and type a similar one instead, or tap a " +
+                    "suggestion in place of what you typed (\"kr\" -> \"it\"), the keyboard " +
+                    "learns it. After the second time, it corrects that typo for you."
         )
 
         SettingToggleSharedPrefs(
@@ -77,6 +82,22 @@ fun LearnedWordsScreen(navController: NavHostController = rememberNavController(
                 context.startActivity(intent)
             }
         ) {}
+
+        if (corrections.isNotEmpty()) {
+            Tip("Your typos (corrected after ${LearnedWordsCore.APPLY_CORRECTION_AFTER} times)")
+        }
+        corrections.forEach { entry ->
+            val status = if (entry.count >= LearnedWordsCore.APPLY_CORRECTION_AFTER) {
+                "Fixed ${entry.count} times · corrected automatically"
+            } else {
+                "Fixed ${entry.count} time · learning"
+            }
+            SettingItem(title = "${entry.from} → ${entry.to}", subtitle = status) {
+                IconButton(onClick = { LearnedWords.removeCorrection(entry.from) }) {
+                    Icon(Icons.Default.Clear, contentDescription = "Forget ${entry.from}")
+                }
+            }
+        }
 
         if (words.isEmpty()) {
             Tip("No learned words yet.")

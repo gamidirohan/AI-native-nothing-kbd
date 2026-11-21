@@ -44,6 +44,17 @@ object LearnedWords {
     /** The current list, for the settings page. */
     val words: StateFlow<List<LearnedWord>> = _words.asStateFlow()
 
+    private val _corrections = MutableStateFlow<List<LearnedCorrection>>(emptyList())
+
+    /** Learned personal typos, for the settings page. */
+    val corrections: StateFlow<List<LearnedCorrection>> = _corrections.asStateFlow()
+
+    // Call with the lock held.
+    private fun publish() {
+        publish()
+        _corrections.value = core.allCorrections()
+    }
+
     private fun file(context: Context) = File(context.filesDir, FILE_NAME)
 
     /** Loads the saved list. Safe to call more than once; it only loads once. */
@@ -60,7 +71,7 @@ object LearnedWords {
                 val hadEntries = core.all().isNotEmpty()
                 if (json != null) core.mergeJson(json)
                 loaded = true
-                _words.value = core.all()
+                publish()
                 hadEntries
             }
             // Words rejected before loading finished were not saved yet.
@@ -80,6 +91,44 @@ object LearnedWords {
         synchronized(core) { core.onAutocorrected(typed, correctedTo, System.currentTimeMillis()) }
     }
 
+    /** The user's own correction for [typed], if they have taught one; null otherwise. */
+    @JvmStatic
+    fun correctionFor(typed: String?): String? {
+        if (typed.isNullOrEmpty()) return null
+        return synchronized(core) { core.correctionFor(typed) }
+    }
+
+    /** Every committed word: completes a delete-and-retype replacement, if one is pending. */
+    @JvmStatic
+    fun onWordCommitted(committed: String) {
+        val ctx = appContext ?: return
+        val entry = synchronized(core) {
+            core.onWordCommitted(committed, System.currentTimeMillis())?.also { publish() }
+        } ?: return
+        Log.d(TAG, "Replacement \"${entry.from}\" -> \"${entry.to}\" (${entry.count}x)")
+        save(ctx)
+    }
+
+    /** The user typed [typed] and then tapped [picked] in the suggestion strip. */
+    @JvmStatic
+    fun onSuggestionPicked(typed: String, picked: String) {
+        val ctx = appContext ?: return
+        val entry = synchronized(core) {
+            core.recordReplacement(typed, picked, System.currentTimeMillis())?.also { publish() }
+        } ?: return
+        Log.d(TAG, "Picked \"${entry.from}\" -> \"${entry.to}\" (${entry.count}x)")
+        save(ctx)
+    }
+
+    fun removeCorrection(from: String) {
+        val ctx = appContext
+        synchronized(core) {
+            core.removeCorrection(from)
+            publish()
+        }
+        ctx?.let { save(it) }
+    }
+
     /** Returns the originally typed word if [deleted] was the latest autocorrection. */
     @JvmStatic
     fun onWordDeleted(deleted: String): String? =
@@ -97,7 +146,7 @@ object LearnedWords {
         load(ctx)
 
         val result = synchronized(core) {
-            core.recordRejection(typed, System.currentTimeMillis())?.also { _words.value = core.all() }
+            core.recordRejection(typed, System.currentTimeMillis())?.also { publish() }
         } ?: return
 
         Log.d(TAG, "Kept \"${result.entry.word}\" (${result.entry.rejections}x)")
@@ -110,7 +159,7 @@ object LearnedWords {
         val ctx = appContext
         synchronized(core) {
             core.remove(word)
-            _words.value = core.all()
+            publish()
         }
         ctx?.let { save(it) }
     }
@@ -119,7 +168,7 @@ object LearnedWords {
         val ctx = appContext
         synchronized(core) {
             core.clear()
-            _words.value = core.all()
+            publish()
         }
         ctx?.let { save(it) }
     }

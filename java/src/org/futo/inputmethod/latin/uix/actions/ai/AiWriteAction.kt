@@ -70,10 +70,10 @@ private sealed interface RewriteUiState {
 /** Where the text to rewrite comes from. */
 private enum class TextSource { Field, Clipboard }
 
-/** Releases the model when the system asks the keyboard to free memory. */
-private class AiWritePersistentState : PersistentActionState {
+/** Releases the model when the system asks the keyboard to free memory, unless kept loaded. */
+private class AiWritePersistentState(private val context: Context) : PersistentActionState {
     override suspend fun cleanUp() {
-        RewriteEngineProvider.release()
+        RewriteEngineProvider.onMemoryTrim(context)
     }
 }
 
@@ -489,7 +489,7 @@ val AiWriteAction = Action(
     icon = R.drawable.ai_write,
     name = R.string.ai_write_action_title,
     simplePressImpl = null,
-    persistentState = { AiWritePersistentState() },
+    persistentState = { manager -> AiWritePersistentState(manager.getContext().applicationContext) },
     canShowKeyboard = false,
     windowImpl = { manager, _ ->
         // Taps on the title bar's refresh button, read by the panel.

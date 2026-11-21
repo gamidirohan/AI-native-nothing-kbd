@@ -249,7 +249,25 @@ public final class Suggest {
         // Words the user has kept after autocorrect changed them (for example Telugu, Hindi or
         // Tamil typed in English letters) are left as typed.
         final boolean isLearnedWord = !resultsArePredictions && LearnedWords.isKept(typedWordString);
-        final boolean willAutoCorrect = hasAutoCorrection && !isLearnedWord;
+
+        // The user's own typos ("kr" -> "it"), learned from words they fixed themselves. This
+        // goes first and is autocorrected even when the dictionary would not.
+        final String learnedCorrection = resultsArePredictions || wordComposer.isResumed()
+                || wordComposer.hasDigits()
+                ? null : LearnedWords.correctionFor(typedWordString);
+        if (learnedCorrection != null) {
+            suggestionsContainer.removeIf(info -> learnedCorrection.equals(info.mWord));
+            suggestionsContainer.add(0, new SuggestedWordInfo(learnedCorrection,
+                    "" /* prevWordsContext */, SuggestedWordInfo.MAX_SCORE,
+                    SuggestedWordInfo.KIND_WHITELIST
+                            | SuggestedWordInfo.KIND_FLAG_APPROPRIATE_FOR_AUTO_CORRECTION,
+                    Dictionary.DICTIONARY_USER_TYPED,
+                    SuggestedWordInfo.NOT_AN_INDEX /* indexOfTouchPointOfSecondWord */,
+                    SuggestedWordInfo.NOT_A_CONFIDENCE /* autoCommitFirstWordConfidence */));
+        }
+        final boolean willAutoCorrect = learnedCorrection != null
+                ? isCorrectionEnabled
+                : hasAutoCorrection && !isLearnedWord;
 
         final SuggestedWordInfo typedWordInfo = new SuggestedWordInfo(typedWordString,
                 "" /* prevWordsContext */, SuggestedWordInfo.MAX_SCORE,

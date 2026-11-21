@@ -343,6 +343,14 @@ public final class InputLogic {
             return inputTransaction;
         }
 
+        // Typing a word and then tapping a different one teaches a personal typo ("kr" -> "it").
+        final String typedBeforePick = mWordComposer.isComposingWord()
+                ? mWordComposer.getTypedWord() : null;
+        if (typedBeforePick != null && !suggestionInfo.isKindOf(SuggestedWordInfo.KIND_TYPED)
+                && shouldLearnFromCorrections(settingsValues)) {
+            LearnedWords.onSuggestionPicked(typedBeforePick, suggestion);
+        }
+
         commitChosenWord(settingsValues, suggestion, LastComposedWord.COMMIT_TYPE_MANUAL_PICK,
                 LastComposedWord.NOT_A_SEPARATOR, suggestionInfo.isKindOf(SuggestedWordInfo.KIND_TYPED) ? 3 : 1);
         mConnection.endBatchEdit();
@@ -2343,6 +2351,10 @@ public final class InputLogic {
         }
         // Add the word to the user history dictionary
         performAdditionToUserHistoryDictionary(settingsValues, chosenWord, ngramContext, importance);
+        // If the user just deleted a word, this may be what they typed instead of it.
+        if (shouldLearnFromCorrections(settingsValues)) {
+            LearnedWords.onWordCommitted(chosenWord);
+        }
         if (DebugFlags.DEBUG_ENABLED) {
             long runTimeMillis = System.currentTimeMillis() - startTimeMillis;
             Log.d(TAG, "commitChosenWord() : " + runTimeMillis + " ms to run "

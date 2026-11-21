@@ -23,6 +23,7 @@ import kotlinx.coroutines.withContext
 import org.futo.inputmethod.latin.uix.actions.ai.AI_AUTO_TRANSLATE_CLIPBOARD
 import org.futo.inputmethod.latin.uix.actions.ai.AI_DOWNLOAD_WIFI_ONLY
 import org.futo.inputmethod.latin.uix.actions.ai.AI_USE_GPU
+import org.futo.inputmethod.latin.uix.actions.ai.AI_KEEP_LOADED
 import org.futo.inputmethod.latin.uix.actions.ai.LlmModelDownloader
 import org.futo.inputmethod.latin.uix.actions.ai.LlmModelStore
 import org.futo.inputmethod.latin.uix.actions.ai.ModelDownloadState
@@ -151,6 +152,13 @@ fun AiWritingScreen(navController: NavHostController = rememberNavController()) 
             title = "Download on Wi-Fi only",
             subtitle = "Avoid using mobile data for the model download",
             setting = AI_DOWNLOAD_WIFI_ONLY
+        )
+
+        SettingToggleDataStore(
+            title = "Keep the AI model loaded",
+            subtitle = "AI Writing opens without waiting for the model to load. Uses about " +
+                    "1.5 GB of memory while the keyboard runs; turn off if other apps close too often.",
+            setting = AI_KEEP_LOADED
         )
 
         SettingToggleDataStore(

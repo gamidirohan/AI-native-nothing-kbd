@@ -252,9 +252,25 @@ class LiteRtRewriteEngine(context: Context) : RewriteEngine {
 
     private fun scheduleIdleRelease() {
         idleJob?.cancel()
+        if (appContext.getSettingBlocking(AI_KEEP_LOADED)) return
         idleJob = scope.launch {
             delay(IDLE_RELEASE_MS)
             lock.withLock { releaseBridge() }
+        }
+    }
+
+    /** Loads the model in the background, so the first rewrite does not wait for it. */
+    fun preload() {
+        scope.launch {
+            lock.withLock {
+                val modelPath = modelPathOverride ?: LlmModelStore.defaultModelFile(appContext).absolutePath
+                if (bridge != null && loadedPath == modelPath) return@withLock
+                try {
+                    ensureBridge(modelPath)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Preload failed: ${e.message}")
+                }
+            }
         }
     }
 

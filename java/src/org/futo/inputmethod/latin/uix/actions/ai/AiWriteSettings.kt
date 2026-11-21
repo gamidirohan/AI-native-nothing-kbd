@@ -26,6 +26,17 @@ val AI_USE_GPU = SettingsKey(
     true
 )
 
+/**
+ * Keep the model in memory instead of loading it on first use. It is loaded in the background
+ * when the keyboard opens and kept until the keyboard process ends, so AI Writing starts
+ * without the load delay (about 1 s on the CPU, 12 s the first time on the GPU). Costs about
+ * 1.5 GB of RAM while the keyboard runs.
+ */
+val AI_KEEP_LOADED = SettingsKey(
+    booleanPreferencesKey("aiWriteKeepLoaded"),
+    true
+)
+
 /** Only download the model on an unmetered connection (normally Wi-Fi). */
 val AI_DOWNLOAD_WIFI_ONLY = SettingsKey(
     booleanPreferencesKey("aiWriteDownloadWifiOnly"),

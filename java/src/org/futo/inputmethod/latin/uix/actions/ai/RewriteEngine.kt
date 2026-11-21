@@ -1,6 +1,7 @@
 package org.futo.inputmethod.latin.uix.actions.ai
 
 import android.content.Context
+import org.futo.inputmethod.latin.uix.getSettingBlocking
 import kotlinx.coroutines.delay
 
 /**
@@ -58,5 +59,19 @@ object RewriteEngineProvider {
     /** Frees the model's memory if it is loaded. Safe to call at any time. */
     fun release() {
         (engine as? LiteRtRewriteEngine)?.release()
+    }
+
+    /** Android asked the keyboard to use less memory: free the model unless it is kept loaded. */
+    fun onMemoryTrim(context: Context) {
+        if (!context.getSettingBlocking(AI_KEEP_LOADED)) release()
+    }
+
+    /** Loads the model in the background if it is kept loaded and installed. Cheap if loaded. */
+    @JvmStatic
+    fun preloadIfKept(context: Context) {
+        val appContext = context.applicationContext
+        if (!LlmModelStore.isInstalled(appContext)) return
+        if (!appContext.getSettingBlocking(AI_KEEP_LOADED)) return
+        (get(appContext) as? LiteRtRewriteEngine)?.preload()
     }
 }

@@ -744,6 +744,10 @@ class LatinIME : InputMethodService(), LifecycleOwner, ViewModelStoreOwner, Save
 
         super.onStartInputView(info, restarting)
         latinIMELegacy.onStartInputView(info, restarting)
+        // Keep the AI Writing model ready, so opening it does not wait for a load.
+        lifecycleScope.launch(Dispatchers.IO) {
+            org.futo.inputmethod.latin.uix.actions.ai.RewriteEngineProvider.preloadIfKept(this@LatinIME)
+        }
         lifecycleScope.launch { uixManager.showUpdateNoticeIfNeeded() }
     }
 

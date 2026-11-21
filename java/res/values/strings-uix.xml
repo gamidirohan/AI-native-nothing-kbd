@@ -14,7 +14,7 @@
     <string name="text_edit_action_title">Text Editor</string>
     <string name="translate_action_title">Translate</string>
     <string name="ai_write_action_title">AI Writing</string>
-    <string name="ai_write_fix_all">Fix all</string>
+    <string name="ai_write_fix_all">Fix Grammar, Spelling, and Punctuation</string>
     <string name="ai_write_professional">Professional</string>
     <string name="ai_write_casual">Casual</string>
     <string name="ai_write_polite">Polite</string>
