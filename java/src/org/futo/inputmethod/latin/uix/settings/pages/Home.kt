@@ -50,7 +50,7 @@ fun HomeScreen(navController: NavHostController = rememberNavController()) {
                 .verticalScroll(scrollState)
         ) {
             Spacer(modifier = Modifier.height(24.dp))
-            ScreenTitle("Nothing Keyboard Settings")
+            ScreenTitle("Zuno Settings")
 
             ConditionalMigrateUpdateNotice()
             ConditionalUpdate(navController)
