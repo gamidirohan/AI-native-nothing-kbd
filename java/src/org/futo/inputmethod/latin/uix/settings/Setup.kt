@@ -115,7 +115,7 @@ fun SetupEnableIME() {
             Step(fraction = 1.0f/3.0f, text = "Setup - Step 1 of 3")
 
             Text(
-                "Welcome to Nothing Keyboard (based on FUTO Keyboard)! Please keep in mind things may be rough. This is not a finished product in any way.\n\nFirst, enable FUTO Keyboard as an input method.",
+                "Welcome to Zuno, the AI-native keyboard (based on FUTO Keyboard)! Please keep in mind things may be rough. This is not a finished product in any way.\n\nFirst, enable FUTO Keyboard as an input method.",
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -155,7 +155,7 @@ fun SetupChangeDefaultIME(doublePackage: Boolean = true) {
             Step(fraction = 2.0f/3.0f, text = "Setup - Step 2 of 3")
 
             Text(
-                "Please select Nothing Keyboard as your active input method.",
+                "Please select Zuno as your active input method.",
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -219,7 +219,7 @@ fun SetupEnableMic(onClick: () -> Unit = { }) {
                     .fillMaxWidth()
                     .padding(16.dp)
             ) {
-                Text("Nothing Keyboard (needs mic permission)")
+                Text("Zuno (needs mic permission)")
             }
 
             Button(
