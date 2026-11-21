@@ -40,6 +40,37 @@ Record results here:
 |---|---|---|---|---|---|---|
 | | | | | | | |
 
+## Results: Nothing Phone (1), 2026-11-21
+
+Measured over adb with the debug benchmark hook (`AiBenchmarkReceiver`), screen on, charging, thermal status 0. Fix all on "hey can u send me teh report by tomorow morning pls" (3 generation steps). "Tokens/sec" counts streamed chunks, about one token each. Free memory was 1.1-3.0 GB and changed during the session, which adds noise.
+
+| Backend | Model | Threads | Load (first) | First token | Tokens/sec | Fix all |
+|---|---|---|---|---|---|---|
+| CPU | INT8 | default | 1.0 s | 3.4 s | 3.1 | 20-23 s |
+| CPU | INT8 | 2 | 0.9 s | 3.9-4.6 s | 3.2-3.3 | 22-23 s |
+| CPU | INT8 | 4 | 0.9 s | 3.3 s | 3.1 | 20-21 s |
+| CPU | INT8 | 6 | 0.9 s | 3.4 s | 2.9 | 21-22 s |
+| CPU | INT8 | 8 | 0.9 s | 3.5-3.6 s | 2.8 | 23 s |
+| CPU | INT8, fp32 activations | 4 | 0.9 s | 4.0-4.8 s | 2.4-2.6 | 25-30 s (lower-memory period) |
+| CPU | INT4 | 4 | 3.8 s | 4.1-4.7 s | 2.5-2.9 | 19-22 s |
+| **GPU (OpenCL)** | **INT8** | - | **11.6 s** | **1.3 s** (warm) | **6.3-6.4** (warm) | **9.4 s** (warm) |
+| GPU | INT4 | - | not run: the app's memory check refused | | | |
+
+Findings:
+- **Thread count makes no difference** (2-8 threads all about 3 tokens/sec). The CPU was busy (about 4 cores for 4 threads), and the model was not being re-read from storage (no page faults during runs). So the CPU path is compute-limited in a way more cores do not fix. That is well below the 9-13 tokens/sec the model card lists for CPU on other phones (LiteRT-LM 0.13.1 there, 0.19.1 here).
+- **First-token time is fixed overhead** (3.4-3.8 s on CPU, the same for a 51- and a 142-character input), mostly the instruction prompt, paid 3 times per Fix all.
+- **GPU: about 2.2x faster overall and 3x faster to the first token.** The first load takes 11.6 s (OpenCL program build); a second load could not be timed because of the memory check below.
+- **INT4** was a little faster on CPU and gave the same Fix all result, but some steps arrived in one piece instead of streaming.
+- **fp32 activations** did not help.
+- **Memory:** the keyboard process was about 290 MB without the model and 1.8-2.1 GB with it. The old 1.6 GB free-memory check refused to load even with 2.4 GB free by `dumpsys meminfo`, because Android's own number is lower.
+
+Changes made from this:
+- **GPU is now the default** (setting "Use the GPU" in AI Writing settings), with automatic fallback to the CPU if the GPU fails to load.
+- **Free-memory check lowered to 800 MB**, and the message now shows the number.
+- CPU threads stay at LiteRT-LM's default, since they made no difference.
+
+Still to measure: GPU second load time (with the cache), GPU + INT4, GPU with a 1024-token context, and whether an emoji in GPU output causes problems.
+
 ## Realistic targets
 
 For Qwen3 0.6B on this phone after tuning: about 7-12 tokens/sec is a reasonable target, 12-15 would be very good. Thermal state, RAM and the exact runtime matter, so nothing above 15 should be promised.

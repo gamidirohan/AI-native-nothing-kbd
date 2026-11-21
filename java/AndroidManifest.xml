@@ -140,6 +140,17 @@
         </activity>
 
         <!-- Broadcast receivers -->
+        <!-- Lets LiteRT-LM use the GPU (OpenCL) where the phone has it. Optional: the app runs
+             without them. -->
+        <uses-native-library android:name="libOpenCL.so" android:required="false" />
+        <uses-native-library android:name="libvndksupport.so" android:required="false" />
+
+        <!-- Debug builds only (the receiver checks BuildConfig.DEBUG): runs AI Writing speed
+             benchmarks from adb. DUMP permission: adb shell has it, normal apps cannot get it. -->
+        <receiver android:name=".uix.actions.ai.AiBenchmarkReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP" />
+
         <receiver android:name="SystemBroadcastReceiver"
              android:exported="true">
             <intent-filter>

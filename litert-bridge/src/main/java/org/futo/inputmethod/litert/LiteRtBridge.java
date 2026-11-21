@@ -1,5 +1,6 @@
 package org.futo.inputmethod.litert;
 
+import com.google.ai.edge.litertlm.ActivationDataType;
 import com.google.ai.edge.litertlm.Backend;
 import com.google.ai.edge.litertlm.Contents;
 import com.google.ai.edge.litertlm.Conversation;
@@ -33,11 +34,52 @@ public final class LiteRtBridge implements AutoCloseable {
 
     private final Engine engine;
 
-    /** Loads the model. Slow (seconds); never call on the main thread. */
+    /** How to run the model. Defaults match what the app has always used. */
+    public static final class Options {
+        /** CPU threads, or 0 for LiteRT-LM's default. Ignored on the GPU. */
+        public int cpuThreads = 0;
+        /** Run on the GPU (OpenCL) instead of the CPU. */
+        public boolean gpu = false;
+        /** "float32", "float16", "int16", "int8", or null for LiteRT-LM's default. */
+        public String activation = null;
+        /** Maximum tokens (prompt + answer) per conversation, or 0 for the model's own limit. */
+        public int maxTokens = 0;
+
+        @Override
+        public boolean equals(Object o) {
+            if (!(o instanceof Options)) return false;
+            Options other = (Options) o;
+            return cpuThreads == other.cpuThreads && gpu == other.gpu && maxTokens == other.maxTokens
+                    && (activation == null ? other.activation == null : activation.equals(other.activation));
+        }
+
+        @Override
+        public int hashCode() {
+            return (cpuThreads * 31 + (gpu ? 1 : 0)) * 31 + maxTokens
+                    + (activation == null ? 0 : activation.hashCode());
+        }
+
+        @Override
+        public String toString() {
+            return (gpu ? "gpu" : "cpu threads=" + cpuThreads) + " activation=" + activation
+                    + " maxTokens=" + maxTokens;
+        }
+    }
+
+    /** Loads the model with the default options. Slow (seconds); never call on the main thread. */
     public LiteRtBridge(String modelPath, String cacheDir) {
-        // CPU backend, no vision or audio backend, no token or image limit.
+        this(modelPath, cacheDir, new Options());
+    }
+
+    /** Loads the model. Slow (seconds); never call on the main thread. */
+    public LiteRtBridge(String modelPath, String cacheDir, Options options) {
+        // No vision or audio backend, no image limit.
+        Integer threads = options.cpuThreads > 0 ? options.cpuThreads : null;
+        Backend backend = options.gpu ? new Backend.GPU() : new Backend.CPU(threads, null);
+        Integer maxTokens = options.maxTokens > 0 ? options.maxTokens : null;
         EngineConfig config = new EngineConfig(
-                modelPath, new Backend.CPU(null, null), null, null, null, null, cacheDir);
+                modelPath, backend, null, null, maxTokens, null, cacheDir,
+                activationType(options.activation));
         Engine created = new Engine(config);
         try {
             created.initialize();
@@ -190,6 +232,17 @@ public final class LiteRtBridge implements AutoCloseable {
         if (interrupted) Thread.currentThread().interrupt();
         if (!stopped) stuck = true;
         return stopped;
+    }
+
+    private static ActivationDataType activationType(String name) {
+        if (name == null) return null;
+        switch (name) {
+            case "float32": return ActivationDataType.FLOAT32;
+            case "float16": return ActivationDataType.FLOAT16;
+            case "int16": return ActivationDataType.INT16;
+            case "int8": return ActivationDataType.INT8;
+            default: return null;
+        }
     }
 
     @Override

@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.futo.inputmethod.latin.uix.actions.ai.AI_AUTO_TRANSLATE_CLIPBOARD
 import org.futo.inputmethod.latin.uix.actions.ai.AI_DOWNLOAD_WIFI_ONLY
+import org.futo.inputmethod.latin.uix.actions.ai.AI_USE_GPU
 import org.futo.inputmethod.latin.uix.actions.ai.LlmModelDownloader
 import org.futo.inputmethod.latin.uix.actions.ai.LlmModelStore
 import org.futo.inputmethod.latin.uix.actions.ai.ModelDownloadState
@@ -150,6 +151,13 @@ fun AiWritingScreen(navController: NavHostController = rememberNavController()) 
             title = "Download on Wi-Fi only",
             subtitle = "Avoid using mobile data for the model download",
             setting = AI_DOWNLOAD_WIFI_ONLY
+        )
+
+        SettingToggleDataStore(
+            title = "Use the GPU",
+            subtitle = "About twice as fast on most phones. The first use after installing takes " +
+                    "about 10 seconds longer. Turn off if AI Writing crashes or gives errors.",
+            setting = AI_USE_GPU
         )
 
         SettingToggleSharedPrefs(

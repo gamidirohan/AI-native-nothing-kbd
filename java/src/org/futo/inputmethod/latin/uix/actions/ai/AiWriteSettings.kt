@@ -17,6 +17,15 @@ val AI_TRANSLATE_TARGET = SettingsKey(
     "es"
 )
 
+/**
+ * Run the model on the GPU. On a Nothing Phone (1) this was about 2.2x faster than the CPU
+ * (6.4 vs 2.4-3.1 tokens/sec; Fix all 9 s vs 20-26 s). Falls back to the CPU if the GPU fails.
+ */
+val AI_USE_GPU = SettingsKey(
+    booleanPreferencesKey("aiWriteUseGpu"),
+    true
+)
+
 /** Only download the model on an unmetered connection (normally Wi-Fi). */
 val AI_DOWNLOAD_WIFI_ONLY = SettingsKey(
     booleanPreferencesKey("aiWriteDownloadWifiOnly"),

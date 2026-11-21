@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.futo.inputmethod.latin.uix.getSettingBlocking
 import org.futo.inputmethod.litert.LiteRtBridge
 import java.util.concurrent.Executors
 
@@ -22,11 +23,13 @@ private const val TAG = "LiteRtRewriteEngine"
 private const val IDLE_RELEASE_MS = 90_000L
 
 /**
- * The model process measured 1.4 GB after loading and 2.0 GB after a few rewrites (desktop JVM;
- * see docs/AI_WRITING_ASSISTANT.md). Below this much free RAM, loading risks Android killing the
- * keyboard, so we refuse with a clear message instead.
+ * Below this much free RAM (as Android reports it), loading would very likely get the keyboard
+ * killed, so we refuse with a clear message instead. It used to be 1.6 GB, which on a Nothing
+ * Phone (1) refused even with about 2.4 GB free by `dumpsys meminfo`: Android's own number is
+ * lower and it frees cached apps when memory is needed. The message shows the number, so this
+ * can be tuned from real reports.
  */
-private const val MIN_FREE_RAM_BYTES = 1600L * 1024L * 1024L
+private const val MIN_FREE_RAM_BYTES = 800L * 1024L * 1024L
 
 /**
  * Runs rewrites on a local `.litertlm` model through LiteRT-LM, via the Java-only
@@ -46,11 +49,31 @@ class LiteRtRewriteEngine(context: Context) : RewriteEngine {
 
     private var bridge: LiteRtBridge? = null
     private var loadedPath: String? = null
+    private var loadedOptions: LiteRtBridge.Options? = null
+
+    /**
+     * Debug benchmark only: run with these options instead of the user's settings. Replacing it
+     * reloads the model on the next request.
+     */
+    @Volatile
+    var optionsOverride: LiteRtBridge.Options? = null
+
+    // Set if the GPU failed to load in this process; the CPU is then used until restart.
+    @Volatile
+    private var gpuFailed = false
+
+    private fun defaultOptions() = LiteRtBridge.Options().apply {
+        gpu = !gpuFailed && appContext.getSettingBlocking(AI_USE_GPU)
+    }
+
+    /** Debug benchmark only: load this model file instead of the installed one. */
+    @Volatile
+    var modelPathOverride: String? = null
     private var idleJob: Job? = null
 
     override suspend fun rewrite(request: RewriteRequest, onPartial: (String) -> Unit): String {
         if (!LlmModelStore.isInstalled(appContext)) throw RewriteException.ModelMissing()
-        val modelPath = LlmModelStore.defaultModelFile(appContext).absolutePath
+        val modelPath = modelPathOverride ?: LlmModelStore.defaultModelFile(appContext).absolutePath
 
         return lock.withLock {
             idleJob?.cancel()
@@ -176,21 +199,33 @@ class LiteRtRewriteEngine(context: Context) : RewriteEngine {
     }
 
     private fun ensureBridge(modelPath: String): LiteRtBridge {
-        bridge?.let { if (loadedPath == modelPath) return it }
+        val opts = optionsOverride ?: defaultOptions()
+        bridge?.let { if (loadedPath == modelPath && loadedOptions == opts) return it }
         releaseBridge()
 
         val memory = ActivityManager.MemoryInfo()
         (appContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(memory)
+        val freeMb = memory.availMem / (1024 * 1024)
+        Log.i(TAG, "loading model: ${freeMb} MB free, lowMemory=${memory.lowMemory}")
         if (memory.availMem < MIN_FREE_RAM_BYTES) {
-            throw RewriteException("Not enough free memory to load the AI model. Close some apps and try again.")
+            throw RewriteException("Not enough free memory to load the AI model ($freeMb MB free). Close some apps and try again.")
         }
 
         try {
-            val loadStart = System.currentTimeMillis()
-            val created = LiteRtBridge(modelPath, appContext.cacheDir.path)
-            Log.i(TAG, "timing model loaded in ${System.currentTimeMillis() - loadStart} ms")
+            val created = try {
+                load(modelPath, opts)
+            } catch (e: Exception) {
+                // The GPU path can fail on some phones (missing or old OpenCL driver). Fall back
+                // to the CPU, which always works, and stop trying the GPU in this process.
+                if (!opts.gpu || optionsOverride != null) throw e
+                Log.w(TAG, "GPU failed to load, using the CPU: ${e.message}")
+                gpuFailed = true
+                opts.gpu = false
+                load(modelPath, opts)
+            }
             bridge = created
             loadedPath = modelPath
+            loadedOptions = opts
             return created
         } catch (e: LinkageError) {
             // UnsatisfiedLinkError when the native library is missing for this CPU (32-bit
@@ -199,6 +234,13 @@ class LiteRtRewriteEngine(context: Context) : RewriteEngine {
         } catch (e: Exception) {
             throw RewriteException("Could not load the model: ${e.message}", e)
         }
+    }
+
+    private fun load(modelPath: String, opts: LiteRtBridge.Options): LiteRtBridge {
+        val loadStart = System.currentTimeMillis()
+        val created = LiteRtBridge(modelPath, appContext.cacheDir.path, opts)
+        Log.i(TAG, "timing model loaded in ${System.currentTimeMillis() - loadStart} ms $opts file=${java.io.File(modelPath).name}")
+        return created
     }
 
     private fun releaseBridge() {
@@ -227,5 +269,6 @@ class LiteRtRewriteEngine(context: Context) : RewriteEngine {
         // Each step normally takes 1-2 s on a desktop CPU; phones are slower.
         const val TIMEOUT_MILLIS = 60_000L
         const val PARTIAL_UPDATE_MILLIS = 100L
+
     }
 }
