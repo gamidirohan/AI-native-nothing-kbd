@@ -51,7 +51,7 @@ object LearnedWords {
 
     // Call with the lock held.
     private fun publish() {
-        publish()
+        _words.value = core.all()
         _corrections.value = core.allCorrections()
     }
 
