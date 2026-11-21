@@ -65,6 +65,8 @@ private sealed interface RewriteUiState {
     data class Working(val partial: String) : RewriteUiState
     data class Done(val text: String) : RewriteUiState
     data class Failed(val message: String) : RewriteUiState
+    /** Reply needs to know which sender in the copied chat is the user. */
+    data class ChooseMe(val senders: List<String>) : RewriteUiState
 }
 
 /** Where the text to rewrite comes from. */
@@ -219,6 +221,9 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction, refreshRequests: In
     var job by remember { mutableStateOf<Job?>(null) }
     var installed by remember { mutableStateOf(LlmModelStore.isInstalled(context)) }
     var languageMenuOpen by remember { mutableStateOf(false) }
+    // Reply: the user's draft from the text field (replaced by the reply), and who they are.
+    var replyDraft by remember { mutableStateOf<TextTarget?>(null) }
+    var replyAs by remember { mutableStateOf<String?>(null) }
     var handoffChecked by remember { mutableStateOf(false) }
     val downloadState by LlmModelDownloader.state.collectAsState()
 
@@ -235,6 +240,48 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction, refreshRequests: In
         TextSource.Clipboard -> clipboardText
     }
 
+    /**
+     * Reply to a copied chat. If it has names, the user's own name is needed (asked once and
+     * remembered). Whatever is in the text field is taken as what the user wants to say, and the
+     * result then replaces it.
+     */
+    fun runReply(copiedText: String) {
+        job?.cancel()
+        selectedStyle = RewriteStyle.Reply
+        copied = false
+        notice = null
+
+        val chat = ChatTranscript.parse(copiedText)
+        val draft = manager.getTextTarget()?.takeIf { it.text.isNotBlank() && it.text.trim() != copiedText.trim() }
+        fieldTarget = draft
+        replyDraft = draft
+
+        job = scope.launch {
+            try {
+                val savedName = context.getSetting(AI_MY_CHAT_NAME)
+                val me = savedName.takeIf { it in chat.senders }
+                if (chat.senders.size >= 2 && me == null) {
+                    state = RewriteUiState.ChooseMe(chat.senders.take(6))
+                    return@launch
+                }
+                replyAs = me?.let { ChatTranscript.shortNames(chat.senders)[it] }
+                state = RewriteUiState.Working("")
+                val prompt = ChatTranscript.replyPrompt(chat, me, draft?.text)
+                val result = engine.rewrite(
+                    RewriteRequest(RewriteStyle.Reply, copiedText, FormatLevel.Balanced, replyPrompt = prompt)
+                ) { state = RewriteUiState.Working(it) }
+                state = RewriteUiState.Done(result.trim())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: RewriteException.ModelMissing) {
+                installed = false
+                state = RewriteUiState.Idle
+            } catch (e: Exception) {
+                state = RewriteUiState.Failed(e.message ?: "Unknown error")
+            }
+        }
+    }
+
     fun run(style: RewriteStyle) {
         if (!installed) return
         if (style.usesClipboard) {
@@ -248,6 +295,8 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction, refreshRequests: In
             }
             source = TextSource.Clipboard
             clipboardText = copiedMessage
+            runReply(copiedMessage)
+            return
         } else if (source == TextSource.Clipboard && selectedStyle?.usesClipboard == true) {
             // Coming back from Reply to a normal option: work on the text field again.
             source = TextSource.Field
@@ -372,8 +421,12 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction, refreshRequests: In
                 val infoText = when {
                     notice != null -> notice!!
                     text == null -> stringResource(R.string.ai_write_no_text)
-                    source == TextSource.Clipboard && selectedStyle?.usesClipboard == true ->
-                        stringResource(R.string.ai_write_target_reply, text.length)
+                    source == TextSource.Clipboard && selectedStyle?.usesClipboard == true -> when {
+                        replyAs != null && replyDraft != null -> stringResource(R.string.ai_write_reply_as_draft, replyAs!!)
+                        replyAs != null -> stringResource(R.string.ai_write_reply_as, replyAs!!)
+                        replyDraft != null -> stringResource(R.string.ai_write_reply_draft)
+                        else -> stringResource(R.string.ai_write_target_reply, text.length)
+                    }
                     source == TextSource.Clipboard -> stringResource(R.string.ai_write_target_clipboard, text.length)
                     fieldTarget?.isSelection == true -> stringResource(R.string.ai_write_target_selection, text.length)
                     else -> stringResource(R.string.ai_write_target_all, text.length)
@@ -383,6 +436,7 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction, refreshRequests: In
                     is RewriteUiState.Working -> s.partial.ifEmpty { stringResource(R.string.ai_write_working) }
                     is RewriteUiState.Done -> s.text
                     is RewriteUiState.Failed -> s.message
+                    is RewriteUiState.ChooseMe -> stringResource(R.string.ai_write_reply_who)
                 }
                 Column(
                     modifier = Modifier
@@ -434,6 +488,21 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction, refreshRequests: In
                         color = if (state is RewriteUiState.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onBackground,
                         modifier = Modifier.padding(top = 2.dp)
                     )
+                    (state as? RewriteUiState.ChooseMe)?.let { choose ->
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.padding(top = 6.dp)
+                        ) {
+                            choose.senders.forEach { sender ->
+                                Pill(label = sender, selected = false) {
+                                    scope.launch {
+                                        context.setSetting(AI_MY_CHAT_NAME, sender)
+                                        clipboardText?.let { runReply(it) }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -450,7 +519,15 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction, refreshRequests: In
                 modifier = Modifier.weight(1f),
                 onClick = {
                     if (done == null) return@Button
-                    if (source == TextSource.Clipboard) {
+                    val draft = replyDraft
+                    if (source == TextSource.Clipboard && selectedStyle?.usesClipboard == true && draft != null) {
+                        // Reply written from the user's draft: the reply replaces the draft.
+                        if (manager.replaceTextTarget(draft, done.text)) {
+                            manager.closeActionWindow()
+                        } else {
+                            state = RewriteUiState.Failed(context.getString(R.string.ai_write_text_changed))
+                        }
+                    } else if (source == TextSource.Clipboard) {
                         // Clipboard text goes in at the cursor, replacing any selection.
                         manager.typeText(done.text)
                         manager.closeActionWindow()
@@ -465,7 +542,7 @@ private fun AiWriteScreen(manager: KeyboardManagerForAction, refreshRequests: In
             ) {
                 Text(
                     stringResource(
-                        if (source == TextSource.Clipboard) R.string.ai_write_insert else R.string.ai_write_replace
+                        if (source == TextSource.Clipboard && replyDraft == null) R.string.ai_write_insert else R.string.ai_write_replace
                     )
                 )
             }

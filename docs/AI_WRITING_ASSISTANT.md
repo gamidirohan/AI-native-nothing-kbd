@@ -217,6 +217,14 @@ Not covered:
 - **Timing logs** for adb, and the streaming preview updates at most every 100 ms.
 - Blocked work and the performance plan are in [needs-access/](needs-access/README.md).
 
+## Round 5 (2026-11-21): learned typos, chat replies, always-loaded model
+
+- **Personal typos.** If you delete a word and within 30 s type a similar one instead, or type a word and tap a different suggestion, the pair is learned ("kr" -> "it", "whys" -> "why's"). After the second time it is autocorrected, in the capitalization you typed. Only typo-like pairs are learned: same length with each changed letter one key away on QWERTY, or about one edit per three letters. Rewording such as "car" -> "bus" is ignored. Undoing a learned correction once stops it. Listed and removable under Text Prediction -> Learned Words. 13 unit tests.
+- **Word order and phrases:** not new. The keyboard's existing personal history already learns which word follows which, when "Personalized suggestions" is on. SwiftKey's own algorithm cannot be copied: it is closed-source Microsoft code.
+- **Reply to copied chats.** WhatsApp's `[date, time] Name: message` format (and the export format) is parsed. The first time, the panel asks "Which one is you?" and remembers the name, so the reply is written as you. Only the last 12 messages or about 1500 characters are sent. Text already in the text box is taken as what you want to say: Reply writes it into a proper message, and Replace swaps it in. Copied text without names: Reply answers the last message. 10 unit tests.
+- **Model kept loaded** (setting "Keep the AI model loaded", default on). It loads in the background when the keyboard opens and is not released on idle or when Android trims memory. That costs about 1.5 GB while the keyboard runs. Deleting or importing a model still releases it.
+- **"Fix all" is now labelled "Fix Grammar, Spelling, and Punctuation".**
+
 ## Known limits
 
 - Nothing has been run on an Android device. The APK builds, but whether it installs, starts and rewrites correctly is untested.

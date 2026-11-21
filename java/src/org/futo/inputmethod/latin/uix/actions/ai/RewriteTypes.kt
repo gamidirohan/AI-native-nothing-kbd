@@ -136,7 +136,9 @@ data class RewriteRequest(
     val text: String,
     val level: FormatLevel = FormatLevel.Balanced,
     /** Display name of the target language, e.g. "Spanish". Only used by styles with [RewriteStyle.needsLanguage]. */
-    val targetLanguage: String? = null
+    val targetLanguage: String? = null,
+    /** For Reply: the prompt built from the copied chat (see [ChatTranscript.replyPrompt]). */
+    val replyPrompt: ChatTranscript.Prompt? = null
 )
 
 /** Builds the prompts handed to the model. Kept separate from any specific engine. */

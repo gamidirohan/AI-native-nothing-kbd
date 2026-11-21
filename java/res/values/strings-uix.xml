@@ -22,7 +22,11 @@
     <string name="ai_write_linkedin">LinkedIn</string>
     <string name="ai_write_shorten">Shorten</string>
     <string name="ai_write_reply">Reply</string>
-    <string name="ai_write_reply_copy_first">Copy the message you want to reply to, then tap Reply.</string>
+    <string name="ai_write_reply_copy_first">Copy the messages you want to reply to, then tap Reply. Copy several messages with names for the best reply. You can also type what you want to say first.</string>
+    <string name="ai_write_reply_who">Which one is you? Pick your name once and Reply will write as you.</string>
+    <string name="ai_write_reply_as">Replying as %1$s</string>
+    <string name="ai_write_reply_as_draft">Replying as %1$s, from what you typed</string>
+    <string name="ai_write_reply_draft">Replying from what you typed (the copied text has no names)</string>
     <string name="ai_write_target_reply">Replying to the copied message · %1$d characters</string>
     <string name="ai_write_translate">Translate</string>
     <string name="ai_write_level_light">Light</string>

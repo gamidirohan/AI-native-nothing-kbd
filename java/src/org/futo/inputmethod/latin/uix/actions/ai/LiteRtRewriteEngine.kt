@@ -92,6 +92,8 @@ class LiteRtRewriteEngine(context: Context) : RewriteEngine {
         request: RewriteRequest,
         onPartial: (String) -> Unit
     ): String {
+        request.replyPrompt?.let { return generateReply(modelPath, request, it, onPartial) }
+
         // Emoji outside the BMP make the model hang, so they are taken out here and put back at
         // the end (see EmojiGuard).
         val stripped = EmojiGuard.strip(request.text)
@@ -164,6 +166,63 @@ class LiteRtRewriteEngine(context: Context) : RewriteEngine {
         // copied into it.
         if (request.style.usesClipboard) return current
         return EmojiGuard.restore(current, stripped, keepPositions)
+    }
+
+    /** One generation for Reply: the prompt already holds the chat and what the user wants to say. */
+    private fun generateReply(
+        modelPath: String,
+        request: RewriteRequest,
+        prompt: ChatTranscript.Prompt,
+        onPartial: (String) -> Unit
+    ): String {
+        val bridge = ensureBridge(modelPath)
+        // Emoji in the chat would make the model hang (see EmojiGuard); the reply does not need them.
+        val user = prompt.user.lines().joinToString("\n") { EmojiGuard.strip(it).text }
+        val raw = StringBuilder()
+        var lastPartialAt = 0L
+        val start = System.currentTimeMillis()
+        var firstChunkAt = 0L
+        var chunks = 0
+        try {
+            bridge.generate(
+                prompt.system, user, TOP_K, TOP_P,
+                request.level.temperature(request.style.category),
+                MAX_REPLY_CHARS, TIMEOUT_MILLIS
+            ) { chunk ->
+                raw.append(chunk)
+                chunks++
+                val now = System.currentTimeMillis()
+                if (firstChunkAt == 0L) firstChunkAt = now
+                if (now - lastPartialAt >= PARTIAL_UPDATE_MILLIS) {
+                    lastPartialAt = now
+                    onPartial(cleanReply(raw.toString()))
+                }
+            }
+        } catch (e: InterruptedException) {
+            dropIfStuck(bridge)
+            throw CancellationException("Rewrite cancelled").also { it.initCause(e) }
+        } catch (e: LiteRtBridge.OutputTooLongException) {
+            throw RewriteException("The AI got stuck repeating itself. Try again.", e)
+        } catch (e: LiteRtBridge.TimedOutException) {
+            dropIfStuck(bridge)
+            throw RewriteException("The AI took too long. Try again.", e)
+        } catch (e: Exception) {
+            dropIfStuck(bridge)
+            throw RewriteException("The model failed: ${e.message}", e)
+        }
+        logStepTiming(request.style, 0, start, firstChunkAt, chunks, user.length)
+        val result = cleanReply(raw.toString())
+        if (result.isBlank()) throw RewriteException("The model returned nothing. Try again.")
+        return result
+    }
+
+    // The model sometimes starts with the sender's name ("Rohan: ...") or writes a second turn.
+    private fun cleanReply(raw: String): String {
+        var text = RewriteOutput.clean(raw, "")
+        text = text.replace(Regex("^[A-Z][\\w .'-]{0,30}:\\s+"), "")
+        val nextTurn = Regex("\n[A-Z][\\w .'-]{0,30}:\\s").find(text)
+        if (nextTurn != null) text = text.substring(0, nextTurn.range.first)
+        return text.trim()
     }
 
     /** Room for a rewrite that is a few times longer than the input, never more than 4000. */
@@ -285,6 +344,8 @@ class LiteRtRewriteEngine(context: Context) : RewriteEngine {
         // Each step normally takes 1-2 s on a desktop CPU; phones are slower.
         const val TIMEOUT_MILLIS = 60_000L
         const val PARTIAL_UPDATE_MILLIS = 100L
+        // A reply is one or two sentences.
+        const val MAX_REPLY_CHARS = 600
 
     }
 }

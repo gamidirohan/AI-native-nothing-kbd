@@ -37,6 +37,12 @@ val AI_KEEP_LOADED = SettingsKey(
     true
 )
 
+/** The user's own name as it appears in copied chats, so Reply writes as them. */
+val AI_MY_CHAT_NAME = SettingsKey(
+    stringPreferencesKey("aiWriteMyChatName"),
+    ""
+)
+
 /** Only download the model on an unmetered connection (normally Wi-Fi). */
 val AI_DOWNLOAD_WIFI_ONLY = SettingsKey(
     booleanPreferencesKey("aiWriteDownloadWifiOnly"),
