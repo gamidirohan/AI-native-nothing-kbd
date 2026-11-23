@@ -66,10 +66,17 @@ It is still a full keyboard: swipe typing, voice input, clipboard history, emoji
 ## Screenshots
 
 <p align="center">
+  <img src="docs/images/keyboard-dark.png" width="49%" alt="Zuno keyboard in the dark theme, with the Nothing dot-matrix font" />
+  <img src="docs/images/keyboard-light.png" width="49%" alt="Zuno keyboard in the light theme, with the Nothing dot-matrix font" />
+</p>
+
+<p align="center"><sub>The keyboard in the dark and light themes, with the Nothing dot-matrix font and red action key.</sub></p>
+
+<p align="center">
   <img src="docs/images/ai-writing-panel.svg" width="380" alt="The AI Writing panel fixing a message" />
 </p>
 
-<p align="center"><sub>The AI Writing panel (illustration). Device screenshots will be added with the next release.</sub></p>
+<p align="center"><sub>The AI Writing panel (illustration).</sub></p>
 
 ## Install
 
