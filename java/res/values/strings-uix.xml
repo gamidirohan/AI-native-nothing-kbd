@@ -113,7 +113,7 @@
     <string name="update">Update</string>
 
     <string name="blacklist">Blacklist</string>
-    <string name="blacklist_from_suggestions">Blacklist \"%1$s\" from being suggested?</string>
+    <string name="blacklist_from_suggestions">Do not predict \"%1$s\" again?</string>
     <string name="disable_emoji">Disable emoji suggestions</string>
     <string name="try_typing">Try typing here…</string>
     <string name="externally_imported_model">Externally imported model</string>

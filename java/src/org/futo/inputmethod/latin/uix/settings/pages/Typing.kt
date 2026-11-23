@@ -510,6 +510,17 @@ fun TypingScreen(navController: NavHostController = rememberNavController()) {
         )
 
         SettingToggleSharedPrefs(
+            title = "Quick prediction insert",
+            subtitle = "Space inserts the middle prediction while you're typing a word that isn't in the dictionary (needs auto-correction)",
+            key = Settings.PREF_QUICK_PREDICTION_INSERT,
+            default = false,
+            icon = {
+                Icon(painterResource(id = R.drawable.icon_spellcheck), contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f))
+            }
+        )
+
+        SettingToggleSharedPrefs(
             title = stringResource(R.string.auto_cap),
             subtitle = stringResource(R.string.auto_cap_summary),
             key = Settings.PREF_AUTO_CAP,

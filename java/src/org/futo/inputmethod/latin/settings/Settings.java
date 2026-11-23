@@ -72,6 +72,9 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     public static final String PREF_LEARN_FROM_CORRECTIONS = "pref_learn_from_corrections";
     // Shows the "~" AI key next to the spacebar. Off by default.
     public static final String PREF_AI_ASSIST_KEY = "pref_ai_assist_key";
+    // SwiftKey-style: space inserts the middle prediction while typing a word that is not in the
+    // dictionary ("neces" + space -> "necessary"). Off by default.
+    public static final String PREF_QUICK_PREDICTION_INSERT = "pref_quick_prediction_insert";
     public static final String PREF_KEY_USE_TRANSFORMER_LM = "pref_key_use_transformer_lm";
     public static final String PREF_KEY_USE_DOUBLE_SPACE_PERIOD =
             "pref_key_use_double_space_period";

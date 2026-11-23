@@ -40,6 +40,7 @@ import org.futo.inputmethod.latin.LastComposedWord;
 import org.futo.inputmethod.latin.LatinIMELegacy;
 import org.futo.inputmethod.latin.NgramContext;
 import org.futo.inputmethod.latin.learning.LearnedWords;
+import org.futo.inputmethod.latin.utils.WordCase;
 import org.futo.inputmethod.latin.RichInputConnection;
 import org.futo.inputmethod.latin.Suggest;
 import org.futo.inputmethod.latin.Suggest.OnGetSuggestedWordsCallback;
@@ -616,6 +617,9 @@ public final class InputLogic {
     // Especially, how do we deal with InputMethodService.onDisplayCompletions?
     public void setSuggestedWords(final SuggestedWords suggestedWords) {
         if (!suggestedWords.isEmpty()) {
+            if (!suggestedWords.mWillAutoCorrect && shouldQuickInsertPrediction(suggestedWords)) {
+                suggestedWords.mWillAutoCorrect = true;
+            }
             suggestedWords.mWillAutoCorrect = suggestedWords.mWillAutoCorrect
                     && !mConnection.textBeforeCursorLooksLikeURL();
             final SuggestedWordInfo suggestedWordInfo;
@@ -706,7 +710,9 @@ public final class InputLogic {
                 inputTransaction.setDidAffectContents();
                 break;
             case Constants.CODE_SHIFT:
-                performRecapitalization(inputTransaction.mSettingsValues);
+                if (!recaseWordAtCursor(inputTransaction.mSettingsValues, currentKeyboardScriptId)) {
+                    performRecapitalization(inputTransaction.mSettingsValues);
+                }
                 inputTransaction.requireShiftUpdate(InputTransaction.SHIFT_UPDATE_NOW);
                 if (mSuggestedWords.isPrediction()) {
                     inputTransaction.setRequiresUpdateSuggestions();
@@ -1507,6 +1513,62 @@ public final class InputLogic {
                 || codePoint == Constants.CODE_PLUS
                 || codePoint == Constants.CODE_PERCENT
                 || Character.getType(codePoint) == Character.OTHER_SYMBOL;
+    }
+
+    /**
+     * Quick prediction insert: while typing a word that is not in the dictionary, space inserts
+     * the prediction shown in the middle of the bar. Mirrors what the suggestion bar shows in the
+     * middle (index 1 when the typed word is not an exact match).
+     */
+    private boolean shouldQuickInsertPrediction(final SuggestedWords suggestedWords) {
+        final SettingsValues settings = Settings.getInstance().getCurrent();
+        if (settings == null || !settings.mQuickPredictionInsert) return false;
+        if (settings.mInputAttributes.mInputTypeNoAutoCorrect) return false;
+        if (suggestedWords.isPrediction() || !mWordComposer.isComposingWord()
+                || mWordComposer.isResumed() || mWordComposer.hasDigits()) return false;
+        if (suggestedWords.size() < 2) return false;
+        final SuggestedWordInfo typed = suggestedWords.getInfo(SuggestedWords.INDEX_OF_TYPED_WORD);
+        if (typed.mWord.length() < 2) return false;
+        if (!typed.isKindOf(SuggestedWordInfo.KIND_TYPED) || typed.isExactMatch()
+                || typed.isExactMatchWithIntentionalOmission()) return false;
+        if (LearnedWords.isKept(typed.mWord)) return false;
+        final SuggestedWordInfo middle = suggestedWords.getInfo(SuggestedWords.INDEX_OF_AUTO_CORRECTION);
+        if (middle.isKindOf(SuggestedWordInfo.KIND_TYPED)
+                || middle.mKindAndFlags == SuggestedWordInfo.KIND_EMOJI_SUGGESTION) return false;
+        // The bar shows the typed word in the middle for weak transformer guesses; so do we.
+        if (middle.mOriginatesFromTransformerLM && middle.mScore < -50) return false;
+        return true;
+    }
+
+    /**
+     * SwiftKey-style: shift while the cursor touches a word (and no word is being typed) cycles
+     * that word through Title Case, ALL CAPS and lowercase, without moving the cursor.
+     * Returns false if there was nothing to recase, so shift behaves normally.
+     */
+    private boolean recaseWordAtCursor(final SettingsValues settingsValues, final int scriptId) {
+        if (mConnection.hasSelection()) return false;
+        // A new word is being typed: shift means "capital next letter", as usual.
+        if (mWordComposer.isComposingWord() && !mWordComposer.isResumed()) return false;
+        if (!settingsValues.mSpacingAndPunctuations.mCurrentLanguageHasSpaces) return false;
+        final TextRange range = mConnection.getWordRangeAtCursor(
+                settingsValues.mSpacingAndPunctuations, scriptId);
+        if (range == null || range.mWord.length() == 0) return false;
+        final String word = range.mWord.toString();
+        final String recased = WordCase.next(word, settingsValues.mLocale);
+        if (recased.equals(word)) return false;
+
+        final int cursor = mConnection.getExpectedSelectionStart();
+        final int start = cursor - range.getNumberOfCharsInWordBeforeCursor();
+        final int end = cursor + range.getNumberOfCharsInWordAfterCursor();
+        mConnection.beginBatchEdit();
+        mConnection.finishComposingText();
+        resetComposingState(true /* alsoResetLastComposedWord */);
+        mConnection.setSelection(start, end);
+        mConnection.commitText(recased, 1);
+        final int newCursor = Math.min(cursor, start + recased.length());
+        mConnection.setSelection(newCursor, newCursor);
+        mConnection.endBatchEdit();
+        return true;
     }
 
     /**
