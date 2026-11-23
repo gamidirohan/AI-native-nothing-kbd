@@ -91,6 +91,9 @@ public final class PointerTracker implements PointerTrackerQueue.Element,
     // Finger travel per line when moving the cursor up or down with the spacebar. Larger than
     // the horizontal step so a slightly wobbly sideways slide does not change lines.
     private static final int sPointerVerticalStep = (int)(40.0 * Resources.getSystem().getDisplayMetrics().density);
+    // Spacebar trackpad: a slide faster than this (pixels per millisecond, about 1.4 dp/ms) moves
+    // by whole words instead of letters, one word per sPointerBigStep of travel.
+    private static final float sWordJumpSpeed = 1.4f * Resources.getSystem().getDisplayMetrics().density;
     private static final int sPointerHugeStep = Integer.min(
             (int)(128.0 * Resources.getSystem().getDisplayMetrics().density),
             Resources.getSystem().getDisplayMetrics().widthPixels * 3 / 2
@@ -145,6 +148,15 @@ public final class PointerTracker implements PointerTrackerQueue.Element,
     private long mStartTime;
     private boolean mCursorMoved = false;
     private boolean mSpacebarLongPressed = false;
+    // Spacebar trackpad: labels are hidden while this is true.
+    private boolean mTrackpadActive = false;
+    private long mLastMoveTimeMillis = 0;
+
+    private void setTrackpadActive(final boolean active) {
+        if (mTrackpadActive == active) return;
+        mTrackpadActive = active;
+        if (sDrawingProxy != null) sDrawingProxy.setTrackpadMode(active);
+    }
 
     // true if keyboard layout has been changed.
     private boolean mKeyboardLayoutHasBeenChanged;
@@ -715,6 +727,7 @@ public final class PointerTracker implements PointerTrackerQueue.Element,
             mStartX = x;
             mStartY = y;
             mStartTime = System.currentTimeMillis();
+            mLastMoveTimeMillis = mStartTime;
             mSpacebarLongPressed = false;
 
             mIsSlidingCursor = key.getCode() == Constants.CODE_DELETE || key.getCode() == Constants.CODE_SPACE;
@@ -929,10 +942,18 @@ public final class PointerTracker implements PointerTrackerQueue.Element,
                 pointerStep = sPointerHugeStep;
             }
 
-            int steps = (x - mStartX) / pointerStep;
             final int swipeIgnoreTime = settingsValues.mKeyLongpressTimeout / MULTIPLIER_FOR_LONG_PRESS_TIMEOUT_IN_SLIDING_INPUT;
             final boolean pastIgnoreTime = mStartTime + swipeIgnoreTime < System.currentTimeMillis();
             final boolean swipingLanguage = settingsValues.mSpacebarMode == Settings.SPACEBAR_MODE_SWIPE_LANGUAGE && !mSpacebarLongPressed;
+
+            // A fast slide jumps by words, a slow one by letters.
+            final long now = System.currentTimeMillis();
+            final float speed = Math.abs(x - lastX) / (float) Math.max(1, now - mLastMoveTimeMillis);
+            mLastMoveTimeMillis = now;
+            final boolean byWord = !swipingLanguage && speed > sWordJumpSpeed;
+            if (byWord) pointerStep = sPointerBigStep;
+
+            int steps = (x - mStartX) / pointerStep;
             if (steps != 0 && pastIgnoreTime) {
                 mCursorMoved = true;
                 mStartX += steps * pointerStep;
@@ -940,7 +961,12 @@ public final class PointerTracker implements PointerTrackerQueue.Element,
                 if(swipingLanguage) {
                     sListener.onSwipeLanguage(steps);
                 } else {
-                    sListener.onMovePointer(steps);
+                    setTrackpadActive(true);
+                    if (byWord) {
+                        sListener.onMovePointerByWord(steps);
+                    } else {
+                        sListener.onMovePointer(steps);
+                    }
                 }
             }
 
@@ -949,6 +975,7 @@ public final class PointerTracker implements PointerTrackerQueue.Element,
             final int lineSteps = (y - mStartY) / sPointerVerticalStep;
             if (lineSteps != 0 && pastIgnoreTime && !swipingLanguage) {
                 mCursorMoved = true;
+                setTrackpadActive(true);
                 mStartY += lineSteps * sPointerVerticalStep;
                 sListener.onMovePointerVertical(lineSteps);
             }
@@ -1040,6 +1067,7 @@ public final class PointerTracker implements PointerTrackerQueue.Element,
 
     private void onUpEventInternal(final int x, final int y, final long eventTime) {
         sTimerProxy.cancelKeyTimersOf(this);
+        setTrackpadActive(false);
         final boolean isInDraggingFinger = mIsInDraggingFinger;
         final boolean isInSlidingKeyInput = mIsInSlidingKeyInput;
         resetKeySelectionByDraggingFinger();
@@ -1136,10 +1164,17 @@ public final class PointerTracker implements PointerTrackerQueue.Element,
                 mSpacebarLongPressed = true;
                 mStartX = mLastX;
                 mStartY = mLastY;
+                setTrackpadActive(true);
                 sListener.onMovingCursorLockEvent(true);
                 return;
             }else if(spacebarMode == Settings.SPACEBAR_MODE_SWIPE_CURSOR_ONLY) {
-                // A short vibration tells the user they can now slide to move the cursor.
+                // Holding the spacebar turns the keyboard into a trackpad: labels fade out and
+                // a short vibration says sliding now moves the cursor. Movement counts from here,
+                // so a little drift while holding does not move the cursor.
+                mSpacebarLongPressed = true;
+                mStartX = mLastX;
+                mStartY = mLastY;
+                setTrackpadActive(true);
                 sListener.onMovingCursorLockEvent(true);
                 return;
             }
@@ -1193,6 +1228,7 @@ public final class PointerTracker implements PointerTrackerQueue.Element,
 
     private void onCancelEventInternal() {
         sTimerProxy.cancelKeyTimersOf(this);
+        setTrackpadActive(false);
         setReleasedKeyGraphics(mCurrentKey, true /* withAnimation */);
         resetKeySelectionByDraggingFinger();
         dismissMoreKeysPanel();

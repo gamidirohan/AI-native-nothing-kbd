@@ -104,6 +104,8 @@ public interface KeyboardActionListener {
     public void onMovePointer(int steps);
     /** Moves the cursor up (negative) or down (positive) by this many lines. */
     public void onMovePointerVertical(int steps);
+    /** Moves the cursor left (negative) or right (positive) by this many words. */
+    public void onMovePointerByWord(int steps);
     public void onMoveDeletePointer(int steps);
     public void onUpWithDeletePointerActive();
     public void onUpWithPointerActive();
@@ -139,6 +141,8 @@ public interface KeyboardActionListener {
         public void onMovePointer(int steps) {}
         @Override
         public void onMovePointerVertical(int steps) {}
+        @Override
+        public void onMovePointerByWord(int steps) {}
         @Override
         public void onMoveDeletePointer(int steps) {}
         @Override
