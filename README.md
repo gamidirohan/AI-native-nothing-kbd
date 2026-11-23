@@ -64,8 +64,8 @@ Zuno is in active development and is not on any app store yet.
 You need JDK 21 and the Android SDK (Android Studio Ladybug or newer has both).
 
 ```bash
-git clone --recursive https://github.com/gamidirohan/AI-native-nothing-kbd.git
-cd AI-native-nothing-kbd
+git clone --recursive https://github.com/gamidirohan/Zuno-AI-Native-Keyboard.git
+cd Zuno-AI-Native-Keyboard
 ./gradlew :assembleStableDebug -Pandroid.injected.build.abi=arm64-v8a -Pandroid.injected.testOnly=false
 ```
 
