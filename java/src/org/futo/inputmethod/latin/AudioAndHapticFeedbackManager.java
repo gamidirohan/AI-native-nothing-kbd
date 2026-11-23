@@ -66,6 +66,17 @@ public final class AudioAndHapticFeedbackManager {
         performAudioFeedback(code);
     }
 
+    /**
+     * The light tick played for each cursor step while the spacebar is used as a trackpad. Only
+     * when key-press vibration is on.
+     */
+    public void performTickFeedback(final View view) {
+        if (mSettingsValues == null || !mSettingsValues.mVibrateOn || view == null) return;
+        view.performHapticFeedback(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1
+                ? HapticFeedbackConstants.TEXT_HANDLE_MOVE
+                : HapticFeedbackConstants.CLOCK_TICK);
+    }
+
     public boolean hasVibrator() {
         return mVibrator != null && mVibrator.hasVibrator();
     }

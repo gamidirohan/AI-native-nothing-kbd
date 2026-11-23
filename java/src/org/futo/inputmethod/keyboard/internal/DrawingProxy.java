@@ -65,6 +65,12 @@ public interface DrawingProxy {
     public void showSlidingKeyInputPreview(@Nullable PointerTracker tracker);
 
     /**
+     * Spacebar trackpad: while active, key labels fade out so the keyboard reads as a blank
+     * trackpad; they fade back when the finger lifts.
+     */
+    public void setTrackpadMode(boolean active);
+
+    /**
      * Show gesture trails.
      * @param tracker the {@link PointerTracker} whose gesture trail will be shown.
      * @param showsFloatingPreviewText when true, a gesture floating preview text will be shown

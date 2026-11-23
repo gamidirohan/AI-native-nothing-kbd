@@ -1308,6 +1308,30 @@ public class LatinIMELegacy implements KeyboardActionListener,
         } else {
             mInputLogic.cursorRight(steps, false, select);
         }
+        trackpadTick();
+    }
+
+    @Override
+    public void onMovePointerByWord(int steps) {
+        int shiftMode = mKeyboardSwitcher.getKeyboardShiftMode();
+        boolean select = (shiftMode == WordComposer.CAPS_MODE_MANUAL_SHIFTED) || (shiftMode == WordComposer.CAPS_MODE_MANUAL_SHIFT_LOCKED);
+        if(select) {
+            mInputLogic.disableRecapitalization();
+        }
+        // With stepOverWords the step count is ignored, so step once per word.
+        for (int i = 0; i < Math.abs(steps); i++) {
+            if (steps < 0) {
+                mInputLogic.cursorLeft(-1, true, select);
+            } else {
+                mInputLogic.cursorRight(1, true, select);
+            }
+        }
+        trackpadTick();
+    }
+
+    private void trackpadTick() {
+        AudioAndHapticFeedbackManager.getInstance().performTickFeedback(
+                mKeyboardSwitcher.getMainKeyboardView());
     }
 
     @Override
@@ -1330,6 +1354,7 @@ public class LatinIMELegacy implements KeyboardActionListener,
         }
 
         mInputLogic.cursorVertical(steps, select);
+        trackpadTick();
     }
 
     @Override

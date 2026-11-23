@@ -819,11 +819,37 @@ public final class MainKeyboardView extends KeyboardView implements DrawingProxy
         invalidateKey(mSpaceKey);
     }
 
+    // Spacebar trackpad: alpha applied to every key label (255 normal, 0 blank).
+    private int mTrackpadLabelAlpha = Constants.Color.ALPHA_OPAQUE;
+    private boolean mTrackpadActive = false;
+    @Nullable private android.animation.ValueAnimator mTrackpadAnimator;
+    private static final long TRACKPAD_FADE_MS = 120;
+
+    @Override
+    public void setTrackpadMode(final boolean active) {
+        if (mTrackpadActive == active) return;
+        mTrackpadActive = active;
+        if (mTrackpadAnimator != null) mTrackpadAnimator.cancel();
+        final android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofInt(
+                mTrackpadLabelAlpha, active ? 0 : Constants.Color.ALPHA_OPAQUE);
+        animator.setDuration(TRACKPAD_FADE_MS);
+        animator.addUpdateListener(a -> {
+            mTrackpadLabelAlpha = (int) a.getAnimatedValue();
+            invalidateAllKeys();
+        });
+        mTrackpadAnimator = animator;
+        animator.start();
+    }
+
     @Override
     protected void onDrawKeyTopVisuals(final Key key, final Canvas canvas, final Paint paint,
             final KeyDrawParams params) {
         if (key.altCodeWhileTyping() && key.isEnabled()) {
             params.mAnimAlpha = mAltCodeKeyWhileTypingAnimAlpha;
+        }
+        if (mTrackpadLabelAlpha < Constants.Color.ALPHA_OPAQUE) {
+            params.mAnimAlpha = params.mAnimAlpha * mTrackpadLabelAlpha / Constants.Color.ALPHA_OPAQUE;
+            if (params.mAnimAlpha == 0) return;
         }
         super.onDrawKeyTopVisuals(key, canvas, paint, params);
         final int code = key.getCode();
@@ -902,7 +928,7 @@ public final class MainKeyboardView extends KeyboardView implements DrawingProxy
             paint.clearShadowLayer();
         }
         paint.setColor(mLanguageOnSpacebarTextColor);
-        paint.setAlpha(mLanguageOnSpacebarAnimAlpha);
+        paint.setAlpha(mLanguageOnSpacebarAnimAlpha * mTrackpadLabelAlpha / Constants.Color.ALPHA_OPAQUE);
         canvas.drawText(language, width / 2, baseline - descent, paint);
         paint.clearShadowLayer();
         paint.setTextScaleX(1.0f);
